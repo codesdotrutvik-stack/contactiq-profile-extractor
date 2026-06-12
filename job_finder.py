@@ -194,6 +194,38 @@ Return format:
     except:
         return f"- Industry: Technology\n- Company: {company_name}"
 
+
+def ask_ai(question):
+    url = "https://api.mistral.ai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {MISTRAL_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "mistral-small-latest",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful Job Finder AI assistant. Help with jobs, resumes, interviews, skills and career advice."
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ],
+        "max_tokens": 300
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=20)
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        return "Unable to get response from AI."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 # ============================================================
 # SESSION STATE
 # ============================================================
@@ -209,6 +241,12 @@ if "search_role" not in st.session_state:
     st.session_state.search_role = DEFAULT_ROLE
 if "search_city" not in st.session_state:
     st.session_state.search_city = DEFAULT_CITY
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+if "show_chatbot" not in st.session_state:
+    st.session_state.show_chatbot = False
 
 # ============================================================
 # SIDEBAR
@@ -379,4 +417,40 @@ if st.session_state.saved_jobs:
 # FOOTER
 # ============================================================
 st.markdown("---")
+
+
+# ============================================================
+# AI CHATBOT
+# ============================================================
+st.markdown("---")
+
+chat_col1, chat_col2 = st.columns([8, 1])
+
+with chat_col2:
+    if st.button("🤖 AI Assistant"):
+        st.session_state.show_chatbot = not st.session_state.show_chatbot
+
+if st.session_state.show_chatbot:
+
+    st.markdown("## 🤖 Career Assistant")
+
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    user_question = st.chat_input("Ask about jobs, resumes, interviews...")
+
+    if user_question:
+        st.session_state.chat_history.append(
+            {"role": "user", "content": user_question}
+        )
+
+        answer = ask_ai(user_question)
+
+        st.session_state.chat_history.append(
+            {"role": "assistant", "content": answer}
+        )
+
+        st.rerun()
+
 st.caption("💼 Job Finder AI | Powered by Adzuna API + Mistral AI")
