@@ -351,7 +351,7 @@ def ask_mistral(question):
     data = {
         "model": "mistral-small-latest",
         "messages": [
-            {"role": "system", "content": "You are Mesta AI, a sleek intelligent assistant created by Nirbhay. Answer clearly and concisely in 2-3 sentences."},
+            {"role": "system", "content": "You are Mesta AI, a helpful assistant. When asked for code, provide COMPLETE working code with all details. For Shopify hero banner, provide full Liquid code, full Schema, full CSS. Don't shorten or summarize. Give at least 30-40 lines of complete code."},
             {"role": "user", "content": question}
         ],
         "max_tokens": 200
