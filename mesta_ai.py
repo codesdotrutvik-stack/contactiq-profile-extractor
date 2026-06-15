@@ -1,6 +1,12 @@
 import streamlit as st
 import requests
 from datetime import datetime
+from langchain.llms import MistralAI
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import ConversationChain
+from langchain.prompts import PromptTemplate
+from langchain.tools import tool
+from langchain.agents import initialize_agent, AgentType
 
 st.set_page_config(page_title="Mesta AI", page_icon="✦", layout="wide")
 
@@ -20,13 +26,6 @@ html, body, [class*="css"], .stApp {
     display: flex; justify-content: space-between; align-items: center;
     padding: 1.4rem 0 1.2rem 0;
     border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-[data-testid="stTextInputRootElement"] {
-    background-color: transparent !important;
-    border: none !important;
-}
-[data-baseweb="base-input"] {
-    background-color: transparent !important;
 }
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header-logo {
@@ -49,7 +48,7 @@ html, body, [class*="css"], .stApp {
     padding: 4px 12px; border-radius: 20px; color: #64748b;
 }
 
-/* INPUT - VISIBILITY FIXED & WHITE BORDER REMOVED */
+/* INPUT - FIXED */
 .stTextInput > div > div > input {
     background: #161726 !important;
     border: 1px solid rgba(139,92,246,0.3) !important;
@@ -80,7 +79,6 @@ html, body, [class*="css"], .stApp {
     border-radius: 50px !important;
     padding: 9px 22px !important;
     font-size: 0.82rem !important;
-    font-family: 'Inter', sans-serif !important;
     transition: all 0.2s !important;
 }
 .stButton > button:hover {
@@ -135,10 +133,46 @@ html, body, [class*="css"], .stApp {
 </style>
 """, unsafe_allow_html=True)
 
-# CONFIG
-MISTRAL_API_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
-MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
+# ============================================================
+# LANGCHAIN SETUP
+# ============================================================
+# Custom LLM class for Mistral
+class MistralLLM:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.url = "https://api.mistral.ai/v1/chat/completions"
+    
+    def __call__(self, prompt):
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "mistral-small-latest",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 200
+        }
+        response = requests.post(self.url, json=data, headers=headers)
+        return response.json()["choices"][0]["message"]["content"]
 
+# Initialize LLM
+llm = MistralLLM(api_key="tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk")
+
+# Memory for conversation
+memory = ConversationBufferMemory()
+
+# Conversation chain
+conversation = ConversationChain(llm=llm, memory=memory)
+
+# Prompt template
+prompt_template = PromptTemplate(
+    input_variables=["question"],
+    template="Answer this question concisely in 2-3 sentences: {question}"
+)
+
+# ============================================================
+# CONFIG
+# ============================================================
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "pending_audio" not in st.session_state:
@@ -231,9 +265,6 @@ var statusEl = document.getElementById('status');
 var animFrame = null;
 var speaking = false;
 
-var delays = [0, 0.08, 0.16, 0.24, 0.32, 0.24, 0.16, 0.08, 0, 0.12, 0.20, 0.28];
-var speeds  = [0.45, 0.55, 0.40, 0.65, 0.50, 0.60, 0.45, 0.55, 0.40, 0.50, 0.65, 0.45];
-
 function startSpeak() {
     speaking = true;
     bars.forEach(function(b) { b.classList.remove('idle'); });
@@ -270,9 +301,6 @@ window.addEventListener('message', function(e) {
     if (e.data.type === 'mesta_speak') startSpeak();
     if (e.data.type === 'mesta_stop')  stopSpeak();
 });
-
-window.mestaStartSpeak = startSpeak;
-window.mestaStopSpeak  = stopSpeak;
 </script>
 </body>
 </html>
@@ -345,20 +373,12 @@ def speak_text(text, voice_type="man"):
     </script>
     """
 
-# API
-def ask_mistral(question):
-    headers = {"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"}
-    data = {
-        "model": "mistral-small-latest",
-        "messages": [
-            {"role": "system", "content": "You are Mesta AI, a sleek intelligent assistant created by Nirbhay. Answer clearly and concisely in 2-3 sentences."},
-            {"role": "user", "content": question}
-        ],
-        "max_tokens": 200
-    }
+# LangChain based API call
+def ask_mistral_langchain(question):
     try:
-        r = requests.post(MISTRAL_URL, json=data, headers=headers, timeout=15)
-        return r.json()["choices"][0]["message"]["content"]
+        # Using LangChain conversation chain (with memory!)
+        response = conversation.predict(input=question)
+        return response
     except Exception as e:
         return f"Connection issue: {str(e)}"
 
@@ -423,7 +443,7 @@ for i, (icon, title) in enumerate(quick_qs):
     with cols[i % 3]:
         if st.button(f"{icon} {title}", use_container_width=True, key=f"qq_{i}"):
             with st.spinner("✦ Thinking..."):
-                answer = ask_mistral(title)
+                answer = ask_mistral_langchain(title)
                 st.session_state.chat_history.append({
                     "q": title, "a": answer,
                     "t": datetime.now().strftime("%I:%M %p"),
@@ -446,7 +466,7 @@ with a2:
 
 if ask_clicked and user_question:
     with st.spinner("✦ Thinking..."):
-        answer = ask_mistral(user_question)
+        answer = ask_mistral_langchain(user_question)
         st.session_state.chat_history.append({
             "q": user_question, "a": answer,
             "t": datetime.now().strftime("%I:%M %p"),
