@@ -1,12 +1,11 @@
 import streamlit as st
 import requests
-import time
 from datetime import datetime
 
 st.set_page_config(page_title="Mesta AI", page_icon="✨", layout="wide")
 
 # ============================================================
-# CLEAN LIGHT MODE CSS
+# CSS WITH VOICE SCRIPT
 # ============================================================
 st.markdown("""
 <style>
@@ -33,7 +32,6 @@ html, body, [class*="css"], .stApp {
     max-width: 1000px !important;
 }
 
-/* Header */
 .mesta-header {
     display: flex;
     justify-content: space-between;
@@ -83,7 +81,6 @@ html, body, [class*="css"], .stApp {
     font-weight: 600;
 }
 
-/* Status */
 .status-box {
     text-align: center;
     margin-bottom: 1.5rem;
@@ -101,7 +98,6 @@ html, body, [class*="css"], .stApp {
     color: #64748b;
 }
 
-/* Voice Button */
 .voice-btn {
     background: linear-gradient(135deg, #8b5cf6, #7c3aed);
     color: white;
@@ -121,7 +117,6 @@ html, body, [class*="css"], .stApp {
     box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
 }
 
-/* Text Input */
 .stTextInput > div > div > input {
     background: white !important;
     border: 1px solid #e2e8f0 !important;
@@ -137,7 +132,6 @@ html, body, [class*="css"], .stApp {
     box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1) !important;
 }
 
-/* Buttons */
 .stButton > button {
     background: #f1f5f9 !important;
     border: 1px solid #e2e8f0 !important;
@@ -145,13 +139,6 @@ html, body, [class*="css"], .stApp {
     border-radius: 50px !important;
     padding: 8px 20px !important;
     font-size: 0.85rem !important;
-    transition: all 0.2s !important;
-}
-
-.stButton > button:hover {
-    background: #e2e8f0 !important;
-    border-color: #cbd5e1 !important;
-    color: #1e293b !important;
 }
 
 .stButton > button[kind="primary"] {
@@ -160,7 +147,6 @@ html, body, [class*="css"], .stApp {
     color: white !important;
 }
 
-/* Chat Bubbles */
 .user-bubble {
     background: linear-gradient(135deg, #8b5cf6, #7c3aed);
     color: white;
@@ -184,7 +170,6 @@ html, body, [class*="css"], .stApp {
     max-width: 75%;
 }
 
-/* Section Headers */
 .section-title {
     font-size: 0.7rem;
     font-weight: 600;
@@ -194,14 +179,12 @@ html, body, [class*="css"], .stApp {
     margin: 1.5rem 0 0.8rem 0;
 }
 
-/* Divider */
 .divider {
     height: 1px;
     background: linear-gradient(90deg, transparent, #e2e8f0, transparent);
     margin: 1.5rem 0;
 }
 
-/* Footer */
 .footer {
     text-align: center;
     font-size: 0.65rem;
@@ -213,70 +196,87 @@ html, body, [class*="css"], .stApp {
 </style>
 
 <script>
-let recognition = null;
-
-function startListening() {
+function startVoiceInput() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-        document.getElementById('statusMsg').innerHTML = '❌ Use Chrome browser';
+        alert("Speech recognition not supported. Please use Chrome browser.");
         return;
     }
     
-    recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
     
     recognition.onstart = function() {
-        document.getElementById('statusMsg').innerHTML = '🎤 Listening... Speak now';
-        document.getElementById('voiceBtn').style.opacity = '0.7';
+        document.getElementById('statusText').innerHTML = '🎤 Listening... Speak now';
+        document.getElementById('statusText').style.background = '#fee2e2';
+        document.getElementById('statusText').style.color = '#991b1b';
     };
     
     recognition.onresult = function(event) {
         const text = event.results[0][0].transcript;
-        document.getElementById('statusMsg').innerHTML = '📝 Processing: ' + text;
+        document.getElementById('statusText').innerHTML = '📝 You said: ' + text;
+        document.getElementById('statusText').style.background = '#dbeafe';
+        document.getElementById('statusText').style.color = '#1e40af';
         
-        const input = document.querySelector('input[data-testid="stTextInput"]');
-        if (input) {
-            input.value = text;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+        const inputBox = document.querySelector('input[data-testid="stTextInput"]');
+        if (inputBox) {
+            inputBox.value = text;
+            inputBox.dispatchEvent(new Event('input', { bubbles: true }));
+            inputBox.dispatchEvent(new Event('change', { bubbles: true }));
         }
         
         setTimeout(() => {
-            const btns = document.querySelectorAll('button');
-            for (let btn of btns) {
-                if (btn.innerText === '🔊 Ask') {
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.innerText === '🔊 Ask' || btn.innerText === 'Ask') {
                     btn.click();
                     break;
                 }
             }
-        }, 100);
+        }, 500);
     };
     
-    recognition.onerror = function() {
-        document.getElementById('statusMsg').innerHTML = '❌ Try again';
-        document.getElementById('voiceBtn').style.opacity = '1';
+    recognition.onerror = function(event) {
+        document.getElementById('statusText').innerHTML = '❌ Error: ' + event.error;
+        document.getElementById('statusText').style.background = '#fee2e2';
+        document.getElementById('statusText').style.color = '#991b1b';
     };
     
     recognition.onend = function() {
-        document.getElementById('voiceBtn').style.opacity = '1';
         setTimeout(() => {
-            if (document.getElementById('statusMsg').innerHTML.includes('Listening')) {
-                document.getElementById('statusMsg').innerHTML = '● Ready';
+            if (document.getElementById('statusText').innerHTML.includes('Listening')) {
+                document.getElementById('statusText').innerHTML = '● Ready';
+                document.getElementById('statusText').style.background = '#ffffff';
+                document.getElementById('statusText').style.color = '#64748b';
             }
-        }, 500);
+        }, 1000);
     };
     
     recognition.start();
 }
 
-function speakAnswer(text) {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.9;
-    utterance.onstart = () => document.getElementById('statusMsg').innerHTML = '🔊 Speaking...';
-    utterance.onend = () => document.getElementById('statusMsg').innerHTML = '● Ready';
-    window.speechSynthesis.speak(utterance);
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        utterance.onstart = function() {
+            document.getElementById('statusText').innerHTML = '🔊 Speaking...';
+            document.getElementById('statusText').style.background = '#d1fae5';
+            document.getElementById('statusText').style.color = '#065f46';
+        };
+        utterance.onend = function() {
+            document.getElementById('statusText').innerHTML = '● Ready';
+            document.getElementById('statusText').style.background = '#ffffff';
+            document.getElementById('statusText').style.color = '#64748b';
+        };
+        window.speechSynthesis.speak(utterance);
+    }
 }
 </script>
 """, unsafe_allow_html=True)
@@ -309,7 +309,7 @@ if "mode" not in st.session_state:
     st.session_state.mode = "text"
 
 # ============================================================
-# MODE TOGGLE BUTTONS
+# MODE TOGGLE
 # ============================================================
 col1, col2 = st.columns(2)
 with col1:
@@ -321,7 +321,6 @@ with col2:
         st.session_state.mode = "voice"
         st.rerun()
 
-# Show active mode indicator
 if st.session_state.mode == "text":
     st.info("✨ Text Mode Active - Type your question below")
 else:
@@ -330,18 +329,20 @@ else:
 # ============================================================
 # STATUS
 # ============================================================
-st.markdown('<div class="status-box"><span id="statusMsg">● Ready</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="status-box"><span id="statusText">● Ready</span></div>', unsafe_allow_html=True)
 
 # ============================================================
-# VOICE MODE
+# VOICE MODE BUTTON
 # ============================================================
 if st.session_state.mode == "voice":
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown('<div style="text-align: center;"><button class="voice-btn" id="voiceBtn" onclick="startListening()">🎤 Click to Speak</button></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align: center; margin: 20px 0;">
+        <button class="voice-btn" onclick="startVoiceInput()">🎤 Click to Speak</button>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================================
-# TEXT INPUT (Common for both modes)
+# TEXT INPUT
 # ============================================================
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">💬 ASK MESTA</div>', unsafe_allow_html=True)
@@ -355,14 +356,13 @@ with col2:
     clear_clicked = st.button("🗑️ Clear Chat", use_container_width=True)
 
 # ============================================================
-# PROCESS QUESTION
+# API FUNCTION
 # ============================================================
 def ask_mistral(question):
     headers = {
         "Authorization": f"Bearer {MISTRAL_API_KEY}",
         "Content-Type": "application/json"
     }
-    
     data = {
         "model": "mistral-small-latest",
         "messages": [
@@ -371,22 +371,26 @@ def ask_mistral(question):
         ],
         "max_tokens": 200
     }
-    
     try:
         response = requests.post(MISTRAL_URL, json=data, headers=headers, timeout=15)
-        answer = response.json()["choices"][0]["message"]["content"]
-        
-        # Speak using browser speech
-        safe_answer = answer.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
-        st.markdown(f'<script>speakAnswer("{safe_answer}");</script>', unsafe_allow_html=True)
-        return answer
+        return response.json()["choices"][0]["message"]["content"]
     except:
-        return "Sorry, I'm having trouble connecting. Please try again."
+        return "Connection issue. Please try again."
 
+# ============================================================
+# PROCESS QUESTION
+# ============================================================
 if ask_clicked and user_question:
     with st.spinner("✨ Thinking..."):
         answer = ask_mistral(user_question)
-        st.session_state.chat_history.append({"q": user_question, "a": answer, "time": datetime.now().strftime("%I:%M %p")})
+        st.session_state.chat_history.append({
+            "q": user_question,
+            "a": answer,
+            "t": datetime.now().strftime("%I:%M %p")
+        })
+        # Speak the answer
+        safe_answer = answer.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
+        st.markdown(f'<script>speakText("{safe_answer}");</script>', unsafe_allow_html=True)
         st.rerun()
 
 if clear_clicked:
@@ -406,11 +410,17 @@ for i, q in enumerate(quick_qs):
         if st.button(q, use_container_width=True):
             with st.spinner("✨ Thinking..."):
                 answer = ask_mistral(q)
-                st.session_state.chat_history.append({"q": q, "a": answer, "time": datetime.now().strftime("%I:%M %p")})
+                st.session_state.chat_history.append({
+                    "q": q,
+                    "a": answer,
+                    "t": datetime.now().strftime("%I:%M %p")
+                })
+                safe_answer = answer.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
+                st.markdown(f'<script>speakText("{safe_answer}");</script>', unsafe_allow_html=True)
                 st.rerun()
 
 # ============================================================
-# CONVERSATION HISTORY
+# CHAT HISTORY
 # ============================================================
 if st.session_state.chat_history:
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -418,7 +428,7 @@ if st.session_state.chat_history:
     
     for chat in reversed(st.session_state.chat_history[-15:]):
         st.markdown(f'<div class="user-bubble"><strong>You</strong><br>{chat["q"]}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="ai-bubble"><strong>✨ Mesta</strong><br>{chat["a"]}<br><span style="font-size:0.6rem;color:#94a3b8;">{chat["time"]}</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="ai-bubble"><strong>✨ Mesta</strong><br>{chat["a"]}<br><span style="font-size:0.6rem;color:#94a3b8;">{chat["t"]}</span></div>', unsafe_allow_html=True)
 
 # ============================================================
 # FOOTER
