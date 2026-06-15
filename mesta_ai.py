@@ -1,6 +1,9 @@
 import streamlit as st
 import requests
+import base64
 from datetime import datetime
+from gtts import gTTS
+import io
 
 st.set_page_config(page_title="Mesta AI", page_icon="✨")
 
@@ -27,8 +30,21 @@ def ask_mistral(question):
     try:
         response = requests.post(MISTRAL_URL, json=data, headers=headers, timeout=15)
         return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"Error: {str(e)}"
+    except:
+        return "Connection issue. Please try again."
+
+def speak(text):
+    """Convert text to speech and play"""
+    try:
+        tts = gTTS(text=text, lang="en", slow=False)
+        audio_buffer = io.BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        audio_bytes = audio_buffer.read()
+        b64 = base64.b64encode(audio_bytes).decode()
+        return f'<audio autoplay="true" src="data:audio/mp3;base64,{b64}"></audio>'
+    except:
+        return ""
 
 # Input
 user_input = st.text_input("Ask Mesta anything...", key="input")
@@ -44,6 +60,9 @@ with col1:
                     "a": answer,
                     "t": datetime.now().strftime("%I:%M %p")
                 })
+                audio_html = speak(answer)
+                if audio_html:
+                    st.markdown(audio_html, unsafe_allow_html=True)
                 st.rerun()
 
 with col2:
@@ -68,6 +87,9 @@ for i, q in enumerate(quick_qs):
                     "a": answer,
                     "t": datetime.now().strftime("%I:%M %p")
                 })
+                audio_html = speak(answer)
+                if audio_html:
+                    st.markdown(audio_html, unsafe_allow_html=True)
                 st.rerun()
 
 # History
