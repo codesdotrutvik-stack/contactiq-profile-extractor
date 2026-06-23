@@ -149,13 +149,6 @@ st.markdown("""
     color: #1e293b !important;
 }
 
-.stNumberInput > div > div > input {
-    background: white !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 8px !important;
-    color: #1e293b !important;
-}
-
 [data-testid="stFileUploader"] {
     background: rgba(255,255,255,0.3) !important;
     border: 2px dashed #e2e8f0 !important;
@@ -305,7 +298,7 @@ with st.container():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
-# UPLOAD SECTION
+# UPLOAD SECTION (Removed Duration)
 # ============================================================
 with st.container():
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
@@ -330,12 +323,7 @@ with st.container():
             st.caption(f"📁 {uploaded_file.name} | {file_size:.2f} MB")
         
         with col2:
-            st.markdown("#### ⏱️ Duration (Minutes)")
-            start_min = st.number_input("Start (min)", min_value=0, value=0, step=1, key="start_min")
-            end_min = st.number_input("End (min)", min_value=0, value=0, step=1, key="end_min")
-            st.caption("Leave 0 for full file")
-        
-        conversation_mode = st.checkbox("💬 Conversation Mode (Speaker Labels)", value=True)
+            conversation_mode = st.checkbox("💬 Conversation Mode (Speaker Labels)", value=True)
 
         if st.button("🎯 Transcribe", type="primary", use_container_width=True):
             with st.spinner("⏳ Transcribing..."):
@@ -345,17 +333,10 @@ with st.container():
                     with open(temp_file, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     
-                    start_sec = start_min * 60
-                    end_sec = end_min * 60
-                    
                     config_params = {
                         "speaker_labels": True if conversation_mode else False,
                         "speakers_expected": 2
                     }
-                    if start_sec > 0:
-                        config_params["audio_start_from"] = start_sec
-                    if end_sec > 0:
-                        config_params["audio_end_at"] = end_sec
                     
                     config = aai.TranscriptionConfig(**config_params)
                     transcriber = aai.Transcriber(config=config)
@@ -378,7 +359,7 @@ with st.container():
                             "full_text": st.session_state.original_text,
                             "time": datetime.now().strftime("%I:%M %p, %d %b"),
                             "mode": "Conversation" if conversation_mode else "Standard",
-                            "duration": f"{start_min}m-{end_min}m" if end_min > 0 else "Full"
+                            "duration": "Full"
                         })
                         st.success("✅ Transcription complete!")
                     else:
@@ -464,7 +445,7 @@ if st.session_state.get("show_translate", False) and st.session_state.original_t
                     )
 
 # ============================================================
-# HISTORY WITH STREAMLIT BUTTONS (No HTML)
+# HISTORY
 # ============================================================
 if st.session_state.history:
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
