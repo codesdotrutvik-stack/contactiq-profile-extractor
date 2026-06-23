@@ -5,6 +5,7 @@ import os
 import requests
 import json
 import hashlib
+import re
 
 st.set_page_config(page_title="Transcriptr", page_icon="🎙️", layout="wide")
 
@@ -29,6 +30,20 @@ def save_history(history):
             json.dump(history, f, indent=2)
     except:
         pass
+
+def get_google_drive_direct_link(url):
+    """Convert Google Drive share link to direct download URL"""
+    # Pattern for drive.google.com/file/d/.../view
+    match = re.search(r'/file/d/([^/]+)/', url)
+    if match:
+        file_id = match.group(1)
+        return f"https://drive.google.com/uc?export=download&id={file_id}"
+    # Pattern for drive.google.com/open?id=...
+    match = re.search(r'[?&]id=([^&]+)', url)
+    if match:
+        file_id = match.group(1)
+        return f"https://drive.google.com/uc?export=download&id={file_id}"
+    return url
 
 st.markdown("""
 <style>
@@ -564,7 +579,7 @@ else:
              stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <line x1="2" y1="12" x2="22" y2="12"/>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/>
         </svg>
         Import from URL (no size limit)
       </div>
@@ -572,15 +587,23 @@ else:
 
     st.caption("Paste a direct link to an audio/video file (supports any size up to 5GB)")
 
-    url_input = st.text_input("File URL", placeholder="https://example.com/audio.mp3", label_visibility="collapsed")
+    url_input = st.text_input("File URL", placeholder="https://drive.google.com/... or https://example.com/file.mp3", label_visibility="collapsed")
+
+    if url_input:
+        # Convert Google Drive share link to direct download link
+        direct_url = get_google_drive_direct_link(url_input)
+        if direct_url != url_input:
+            st.info(f"🔗 Direct download URL: {direct_url}")
+
     conversation_mode = st.checkbox("Speaker labels (Conversation Mode)", value=True)
 
     if st.button("Transcribe from URL", type="primary", use_container_width=True) and url_input:
         with st.spinner("Processing remote file…"):
             try:
+                direct = get_google_drive_direct_link(url_input)
                 config = aai.TranscriptionConfig(speaker_labels=True, speakers_expected=2)
                 transcriber = aai.Transcriber(config=config)
-                transcript = transcriber.transcribe(url_input)
+                transcript = transcriber.transcribe(direct)
                 if transcript.text:
                     formatted = format_transcript(transcript, conversation_mode)
                     st.session_state.transcribed_text = formatted
@@ -590,7 +613,7 @@ else:
                     add_to_history(formatted, formatted, mode)
                     st.markdown('<div class="tr-ok">✓ &nbsp;Transcription complete!</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="tr-err">⚠ No speech detected.</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="tr-err">⚠ No speech detected. Make sure the file is publicly accessible.</div>', unsafe_allow_html=True)
             except Exception as e:
                 st.markdown(f'<div class="tr-err">⚠ {e}</div>', unsafe_allow_html=True)
 
