@@ -40,7 +40,7 @@ st.markdown("""
 * { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',sans-serif; }
 
 .stApp {
-    background: linear-gradient(135deg, #f0f4ff 0%, #ffffff 50%, #f5f0ff 100%);
+    background: #0a0a12;
     min-height:100vh;
 }
 
@@ -59,6 +59,10 @@ st.markdown("""
     0%   { background-position:-200% center; }
     100% { background-position:200% center; }
 }
+@keyframes pulse {
+    0%,100% { opacity:1; }
+    50%      { opacity:0.4; }
+}
 @keyframes waveAnim {
     0%,100% { transform:scaleY(0.3); }
     50% { transform:scaleY(1); }
@@ -67,12 +71,12 @@ st.markdown("""
 .tr-header { text-align:center; padding:2.8rem 0 2.2rem; animation:fadeUp 0.7s ease both; }
 .tr-badge {
     display:inline-flex; align-items:center; gap:7px;
-    background:rgba(139,92,246,0.1);
-    border:1px solid rgba(139,92,246,0.22);
+    background:rgba(139,92,246,0.12);
+    border:1px solid rgba(139,92,246,0.2);
     border-radius:100px;
     padding:5px 16px;
     font-size:0.65rem; font-weight:700;
-    color:#7c3aed; letter-spacing:2.5px; text-transform:uppercase;
+    color:#a78bfa; letter-spacing:2.5px; text-transform:uppercase;
     margin-bottom:1.4rem;
 }
 .tr-badge .live-dot {
@@ -86,9 +90,9 @@ st.markdown("""
     letter-spacing:-0.05em; line-height:1;
     margin-bottom:0.5rem;
 }
-.tr-logo .w { color:#1e293b; }
+.tr-logo .w { color:#e2e8f0; }
 .tr-logo .acc {
-    background:linear-gradient(135deg,#7c3aed 0%,#4f46e5 55%,#06b6d4 100%);
+    background:linear-gradient(135deg,#a78bfa 0%,#7c3aed 55%,#06b6d4 100%);
     background-size:200% auto;
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
     animation:shimmer 5s linear infinite;
@@ -100,13 +104,12 @@ st.markdown("""
 }
 .tr-pill {
     display:inline-flex; align-items:center; gap:5px;
-    background:rgba(139,92,246,0.06);
-    border:1px solid rgba(139,92,246,0.12);
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.06);
     border-radius:100px; padding:4px 12px;
-    font-size:0.68rem; font-weight:500; color:#4b5563;
+    font-size:0.68rem; font-weight:500; color:#94a3b8;
 }
 
-/* ─── WAVE ANIMATION ─────────────────────────────── */
 .wave-container {
     display:flex; justify-content:center; align-items:center;
     gap:4px; height:60px; margin:1.5rem 0;
@@ -130,46 +133,42 @@ st.markdown("""
 .wave-bar:nth-child(11) { animation-delay:0.20s; height:28px; }
 .wave-bar:nth-child(12) { animation-delay:0.28s; height:36px; }
 
-.wave-bar.active {
-    animation-duration: 0.6s;
-}
-
 .wave-status {
-    text-align:center; color:#94a3b8; font-size:0.7rem;
+    text-align:center; color:#475569; font-size:0.7rem;
     letter-spacing:0.04em; margin-top:0.2rem;
 }
-.wave-status.active { color:#7c3aed; font-weight:600; }
+.wave-status.active { color:#a78bfa; font-weight:600; }
 
-/* ─── INPUT PANEL ───────────────────────────────── */
 .input-panel {
-    background:rgba(255,255,255,0.7);
-    backdrop-filter:blur(12px);
-    border:1px solid rgba(139,92,246,0.12);
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.06);
     border-radius:18px; padding:1.8rem 1.8rem 1.4rem;
     margin-bottom:1.2rem; animation:fadeUp 0.5s ease both;
     transition:border-color 0.25s;
 }
-.input-panel:hover { border-color:rgba(139,92,246,0.25); }
+.input-panel:hover { border-color:rgba(139,92,246,0.18); }
 .panel-title {
-    font-size:0.68rem; font-weight:700; color:#334155;
+    font-size:0.68rem; font-weight:700; color:#cbd5e1;
     text-transform:uppercase; letter-spacing:2px;
     margin-bottom:1.1rem;
     display:flex; align-items:center; gap:8px;
 }
-.panel-title svg { flex-shrink:0; }
 
-/* ─── DURATION SLIDER ────────────────────────────── */
-[data-testid="stSlider"] {
-    padding:0.5rem 0;
+.duration-box {
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.06);
+    border-radius:12px;
+    padding:0.8rem 1.2rem;
+    margin:0.8rem 0;
 }
-[data-testid="stSlider"] .stSliderLabel {
-    color:#475569 !important;
-    font-size:0.75rem !important;
+.duration-label {
+    color:#94a3b8; font-size:0.7rem; font-weight:500;
+    display:flex; align-items:center; gap:6px;
+    margin-bottom:0.3rem;
 }
-[data-testid="stSlider"] .stSliderValue {
-    color:#7c3aed !important;
-    font-weight:600 !important;
-}
+[data-testid="stSlider"] { padding:0.3rem 0; }
+[data-testid="stSlider"] .stSliderLabel { color:#94a3b8 !important; font-size:0.7rem !important; }
+[data-testid="stSlider"] .stSliderValue { color:#a78bfa !important; font-weight:600 !important; }
 
 .rec-hint {
     color:#64748b; font-size:0.75rem; text-align:center;
@@ -177,16 +176,16 @@ st.markdown("""
 }
 
 [data-testid="stFileUploader"] {
-    background:rgba(255,255,255,0.4) !important;
-    border:1.5px dashed rgba(139,92,246,0.2) !important;
+    background:rgba(255,255,255,0.015) !important;
+    border:1.5px dashed rgba(139,92,246,0.15) !important;
     border-radius:12px !important;
     transition:border-color 0.2s !important;
 }
 [data-testid="stFileUploader"]:hover {
-    border-color:rgba(139,92,246,0.4) !important;
-    background:rgba(139,92,246,0.05) !important;
+    border-color:rgba(139,92,246,0.35) !important;
+    background:rgba(139,92,246,0.03) !important;
 }
-[data-testid="stFileUploader"] span { color:#475569 !important; }
+[data-testid="stFileUploader"] span { color:#94a3b8 !important; }
 
 [data-testid="stVideo"],[data-testid="stAudio"] {
     width:100% !important; border-radius:12px !important;
@@ -194,17 +193,17 @@ st.markdown("""
 }
 
 .tr-box {
-    background:rgba(255,255,255,0.85);
-    border:1px solid rgba(139,92,246,0.12);
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.06);
     border-radius:14px;
     padding:20px 22px;
     min-height:150px; max-height:480px;
-    color:#1e293b; font-size:0.88rem; line-height:1.85;
+    color:#d1d5db; font-size:0.88rem; line-height:1.85;
     white-space:pre-wrap; overflow-y:auto;
     animation:fadeUp 0.5s ease both;
     margin-bottom:0;
 }
-.tr-box-gold { border-color:rgba(251,191,36,0.25) !important; }
+.tr-box-gold { border-color:rgba(251,191,36,0.15) !important; }
 
 .action-row {
     display:grid; grid-template-columns:1fr 1fr 1fr;
@@ -229,13 +228,13 @@ st.markdown("""
 }
 .tr-section::after {
     content:''; flex:1; height:1px;
-    background:rgba(139,92,246,0.12);
+    background:rgba(255,255,255,0.05);
 }
 
 .hist-card {
     display:flex; align-items:stretch;
-    background:rgba(255,255,255,0.6);
-    border:1px solid rgba(139,92,246,0.08);
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.06);
     border-radius:16px; overflow:hidden;
     margin-bottom:10px;
     transition:border-color 0.2s, background 0.2s;
@@ -243,7 +242,7 @@ st.markdown("""
 }
 .hist-card:hover {
     border-color:rgba(139,92,246,0.2);
-    background:rgba(255,255,255,0.8);
+    background:rgba(139,92,246,0.03);
 }
 .hist-main { flex:1; padding:14px 16px; min-width:0; }
 .hist-top {
@@ -252,14 +251,14 @@ st.markdown("""
 }
 .hist-badge {
     font-size:0.62rem; font-weight:800;
-    color:#7c3aed; text-transform:uppercase; letter-spacing:1.5px;
-    background:rgba(124,58,237,0.08);
+    color:#a78bfa; text-transform:uppercase; letter-spacing:1.5px;
+    background:rgba(124,58,237,0.1);
     border:1px solid rgba(124,58,237,0.15);
     border-radius:6px; padding:2px 8px;
 }
-.hist-time { color:#94a3b8; font-size:0.65rem; font-weight:500; }
+.hist-time { color:#475569; font-size:0.65rem; font-weight:500; }
 .hist-preview {
-    color:#475569; font-size:0.8rem; line-height:1.55;
+    color:#94a3b8; font-size:0.8rem; line-height:1.55;
     overflow:hidden;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
 }
@@ -267,9 +266,9 @@ st.markdown("""
 .hist-dl-col [data-testid="stDownloadButton"] button {
     background:rgba(139,92,246,0.06) !important;
     border:none !important;
-    border-left:1px solid rgba(139,92,246,0.1) !important;
+    border-left:1px solid rgba(139,92,246,0.08) !important;
     border-radius:0 !important;
-    color:#7c3aed !important;
+    color:#a78bfa !important;
     font-size:1.1rem !important; font-weight:700 !important;
     height:100% !important; min-height:72px !important;
     width:100% !important;
@@ -295,13 +294,13 @@ st.markdown("""
     box-shadow:0 4px 22px rgba(124,58,237,0.25) !important;
 }
 .stButton > button[kind="secondary"] {
-    background:rgba(255,255,255,0.5) !important;
-    color:#475569 !important; box-shadow:none !important;
-    border:1px solid rgba(139,92,246,0.15) !important;
+    background:rgba(255,255,255,0.03) !important;
+    color:#94a3b8 !important; box-shadow:none !important;
+    border:1px solid rgba(255,255,255,0.06) !important;
 }
 .stButton > button[kind="secondary"]:hover {
-    background:rgba(255,255,255,0.8) !important;
-    color:#1e293b !important;
+    background:rgba(255,255,255,0.06) !important;
+    color:#cbd5e1 !important;
 }
 [data-testid="stDownloadButton"] button {
     background:linear-gradient(135deg,#7c3aed,#4f46e5) !important;
@@ -315,32 +314,32 @@ st.markdown("""
     transform:translateY(-1px) !important;
 }
 
-[data-testid="stCheckbox"] label { color:#475569 !important; font-size:0.8rem !important; }
+[data-testid="stCheckbox"] label { color:#94a3b8 !important; font-size:0.8rem !important; }
 
 [data-testid="stSelectbox"] > div > div {
-    background:rgba(255,255,255,0.5) !important;
-    border:1px solid rgba(139,92,246,0.15) !important;
-    border-radius:10px !important; color:#1e293b !important;
+    background:rgba(255,255,255,0.03) !important;
+    border:1px solid rgba(255,255,255,0.06) !important;
+    border-radius:10px !important; color:#cbd5e1 !important;
 }
-[data-testid="stSelectbox"] select { color:#1e293b !important; }
+[data-testid="stSelectbox"] select { color:#cbd5e1 !important; }
 
-.stCaption p,[data-testid="stCaptionContainer"] p { color:#94a3b8 !important; font-size:0.7rem !important; }
+.stCaption p,[data-testid="stCaptionContainer"] p { color:#475569 !important; font-size:0.7rem !important; }
 
 .tr-ok {
     display:flex; align-items:center; gap:10px;
-    background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15);
-    border-radius:10px; padding:10px 14px; color:#065f46;
+    background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.12);
+    border-radius:10px; padding:10px 14px; color:#34d399;
     font-size:0.8rem; font-weight:500; margin:0.7rem 0;
     animation:fadeUp 0.4s ease;
 }
 .tr-err {
-    background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.15);
-    border-radius:10px; padding:10px 14px; color:#991b1b;
+    background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.12);
+    border-radius:10px; padding:10px 14px; color:#f87171;
     font-size:0.8rem; margin:0.7rem 0;
 }
 .tr-warn {
-    background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.15);
-    border-radius:10px; padding:10px 14px; color:#92400e;
+    background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.12);
+    border-radius:10px; padding:10px 14px; color:#fbbf24;
     font-size:0.8rem; margin:0.7rem 0;
 }
 
@@ -349,7 +348,7 @@ st.markdown("""
 ::-webkit-scrollbar-thumb { background:#7c3aed; border-radius:10px; }
 
 .tr-footer {
-    text-align:center; color:#94a3b8;
+    text-align:center; color:#475569;
     font-size:0.6rem; font-weight:500; letter-spacing:1px;
     padding:1.5rem 0 0.5rem;
 }
@@ -357,7 +356,7 @@ st.markdown("""
 
 .tr-hr {
     height:1px;
-    background:linear-gradient(90deg,transparent,rgba(139,92,246,0.15),transparent);
+    background:linear-gradient(90deg,transparent,rgba(139,92,246,0.08),transparent);
     margin:2rem 0 0; border:none;
 }
 .spacer-sm { height:0.6rem; }
@@ -376,6 +375,7 @@ if "last_processed_file"   not in st.session_state: st.session_state.last_proces
 if "show_translate"        not in st.session_state: st.session_state.show_translate        = False
 if "input_mode"            not in st.session_state: st.session_state.input_mode            = "record"
 if "duration_minutes"      not in st.session_state: st.session_state.duration_minutes      = 0
+if "file_uploaded"         not in st.session_state: st.session_state.file_uploaded         = False
 
 # ─── HELPERS ────────────────────────────────────────────────
 def translate_text(text, target_lang):
@@ -407,10 +407,9 @@ def add_to_history(text, full_text, mode):
 def do_transcribe(file_path, conversation_mode, mode_label, duration_minutes=0):
     config = aai.TranscriptionConfig(speaker_labels=True, speakers_expected=2)
     
-    # If duration is set, use audio_start_from and audio_end_at
     if duration_minutes > 0:
         config.audio_start_from = 0
-        config.audio_end_at = duration_minutes * 60  # Convert to seconds
+        config.audio_end_at = duration_minutes * 60
     
     transcriber = aai.Transcriber(config=config)
     transcript = transcriber.transcribe(file_path)
@@ -480,20 +479,12 @@ with col_t3:
         st.session_state.input_mode = "url"
         st.rerun()
 
-# ─── DURATION SLIDER ──────────────────────────────────────────
-st.markdown("### ⏱️ Duration")
-duration_minutes = st.slider(
-    "Select duration to transcribe (0 = full file)",
-    min_value=0, max_value=30, value=0, step=1
-)
-st.caption(f"{'Full file' if duration_minutes == 0 else f'First {duration_minutes} minute(s)'}")
-
 # ─── RECORD PANEL ────────────────────────────────────────────
 if st.session_state.input_mode == "record":
     st.markdown("""
     <div class="input-panel">
       <div class="panel-title">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.2"
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.2"
              stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -506,6 +497,17 @@ if st.session_state.input_mode == "record":
     st.markdown('<p class="rec-hint">Press the mic icon below to start — auto-transcribes on stop</p>', unsafe_allow_html=True)
     audio_value = st.audio_input("rec", key="audio_recorder", label_visibility="collapsed")
 
+    # Duration slider appears when recording
+    st.markdown('<div class="duration-box">', unsafe_allow_html=True)
+    st.markdown('<div class="duration-label">⏱️ Duration</div>', unsafe_allow_html=True)
+    duration_minutes = st.slider(
+        "Select duration (0 = full file)",
+        min_value=0, max_value=30, value=0, step=1,
+        label_visibility="collapsed"
+    )
+    st.caption(f"{'Full file' if duration_minutes == 0 else f'First {duration_minutes} minute(s)'}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
     audio_hash = hashlib.md5(audio_value.getvalue()).hexdigest() if audio_value else None
     if audio_value and audio_hash != st.session_state.last_processed_audio:
         st.session_state.last_processed_audio = audio_hash
@@ -516,7 +518,6 @@ if st.session_state.input_mode == "record":
                 ok = do_transcribe(tmp, True, "Conversation", duration_minutes)
                 if ok:
                     st.markdown('<div class="tr-ok">✓ &nbsp;Transcription complete!</div>', unsafe_allow_html=True)
-                    st.markdown('<script>document.getElementById("waveStatus").innerHTML = "✅ Transcription complete!"</script>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="tr-err">⚠ No speech detected.</div>', unsafe_allow_html=True)
             except Exception as e:
@@ -532,7 +533,7 @@ elif st.session_state.input_mode == "upload":
     st.markdown("""
     <div class="input-panel">
       <div class="panel-title">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.2"
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.2"
              stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
           <polyline points="17 8 12 3 7 8"/>
@@ -547,12 +548,26 @@ elif st.session_state.input_mode == "upload":
     uploaded_file = st.file_uploader("u", type=["mp3","wav","m4a","flac","webm","mp4","mov","avi","mkv"], label_visibility="collapsed")
 
     if uploaded_file:
+        st.session_state.file_uploaded = True
         file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
         if "video" in uploaded_file.type or uploaded_file.name.lower().endswith((".mp4",".mov",".avi",".mkv")):
             st.video(uploaded_file)
         else:
             st.audio(uploaded_file, format="audio/wav")
         st.caption(f"📄 {uploaded_file.name}  ·  {len(uploaded_file.getvalue())/(1024*1024):.2f} MB")
+        
+        # ─── DURATION SLIDER (Only shows after file upload) ───
+        st.markdown('<div class="duration-box">', unsafe_allow_html=True)
+        st.markdown('<div class="duration-label">⏱️ Duration</div>', unsafe_allow_html=True)
+        duration_minutes = st.slider(
+            "Select duration (0 = full file)",
+            min_value=0, max_value=30, value=0, step=1,
+            key="duration_slider_upload",
+            label_visibility="collapsed"
+        )
+        st.caption(f"{'Full file' if duration_minutes == 0 else f'First {duration_minutes} minute(s)'}")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
         conversation_mode = st.checkbox("Speaker labels (Conversation Mode)", value=True)
 
         if st.button("Transcribe", type="primary", use_container_width=True):
@@ -576,6 +591,9 @@ elif st.session_state.input_mode == "upload":
                         except: pass
             else:
                 st.markdown('<div class="tr-warn">⚠ Already transcribed.</div>', unsafe_allow_html=True)
+    else:
+        st.session_state.file_uploaded = False
+        st.info("📂 Upload a file to see duration options")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -584,7 +602,7 @@ else:
     st.markdown("""
     <div class="input-panel">
       <div class="panel-title">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.2"
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.2"
              stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <line x1="2" y1="12" x2="22" y2="12"/>
@@ -594,9 +612,25 @@ else:
       </div>
     """, unsafe_allow_html=True)
 
-    st.caption("Paste any direct audio/video URL or Google Drive share link (file must be publicly accessible)")
+    st.caption("Paste any direct audio/video URL or Google Drive share link")
 
     url_input = st.text_input("File URL", placeholder="https://drive.google.com/file/d/.../view or https://example.com/file.mp3", label_visibility="collapsed")
+    
+    # Duration slider for URL (shown when URL is entered)
+    if url_input:
+        st.markdown('<div class="duration-box">', unsafe_allow_html=True)
+        st.markdown('<div class="duration-label">⏱️ Duration</div>', unsafe_allow_html=True)
+        duration_minutes = st.slider(
+            "Select duration (0 = full file)",
+            min_value=0, max_value=30, value=0, step=1,
+            key="duration_slider_url",
+            label_visibility="collapsed"
+        )
+        st.caption(f"{'Full file' if duration_minutes == 0 else f'First {duration_minutes} minute(s)'}")
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        duration_minutes = 0
+    
     conversation_mode = st.checkbox("Speaker labels (Conversation Mode)", value=True)
 
     if st.button("Transcribe from URL", type="primary", use_container_width=True) and url_input:
