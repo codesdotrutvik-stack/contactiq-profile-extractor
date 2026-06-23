@@ -191,6 +191,7 @@ st.markdown("""
     border:1px solid rgba(244,63,94,0.12);
     border-radius:12px;
     padding:0.5rem;
+    display: none;
 }
 .record-box:hover {
     border-color:rgba(244,63,94,0.25);
