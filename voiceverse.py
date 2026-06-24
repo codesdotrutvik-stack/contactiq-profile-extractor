@@ -50,7 +50,6 @@ def speech_to_text(audio_bytes):
         return None
 
 def detect_language(text):
-    """Detect language from text with Portuguese support."""
     for char in text:
         cp = ord(char)
         if 0x0A80 <= cp <= 0x0AFF: return "gu"
@@ -58,11 +57,9 @@ def detect_language(text):
         if 0x0600 <= cp <= 0x06FF: return "ar"
         if 0x0980 <= cp <= 0x09FF: return "bn"
         if 0x00C0 <= cp <= 0x00FF: return "pt"
-    
-    portuguese_words = ["você", "obrigado", "por favor", "bom dia", "tudo bem", "como", "está", "plan", "today"]
-    lower_text = text.lower()
+    portuguese_words = ["você", "obrigado", "por favor", "bom dia", "tudo bem", "como", "está"]
     for word in portuguese_words:
-        if word in lower_text:
+        if word in text.lower():
             return "pt"
     return "en"
 
@@ -74,9 +71,8 @@ def get_ai_response(text, chat_history=None, callback=None):
             "Content-Type": "application/json"
         }
         
-        user_lang = detect_language(text)
         if st.session_state.selected_language == "auto":
-            target_lang = user_lang
+            target_lang = detect_language(text)
         else:
             target_lang = st.session_state.selected_language
         
@@ -88,13 +84,9 @@ def get_ai_response(text, chat_history=None, callback=None):
         lang_name = lang_map.get(target_lang, "English")
         
         system_content = (
-            f"You are a helpful conversational voice assistant with memory of the full conversation. "
-            f"Always remember what was said earlier in the conversation and continue naturally from it. "
-            f"CRITICAL INSTRUCTION: You MUST respond ONLY in {lang_name} language. "
-            f"NEVER use any other language. "
-            f"Respond in one short paragraph (max 3 sentences). "
-            f"Keep it natural and conversational. "
-            f"Do not use bullet points, lists, or markdown."
+            f"You are a helpful conversational voice assistant. "
+            f"CRITICAL: You MUST respond ONLY in {lang_name} language. "
+            f"Keep response under 3 sentences. Do not use bullet points."
         )
         
         system_msg = {"role": "system", "content": system_content}
@@ -172,7 +164,7 @@ def export_history(conversation):
     return "\n".join(lines)
 
 # ============================================
-# 🗂️ SESSION STATE INIT
+# 🗂️ SESSION STATE
 # ============================================
 if "conversation" not in st.session_state:
     st.session_state.conversation = load_history()
@@ -193,12 +185,8 @@ if "pending_audio_bytes" not in st.session_state:
     st.session_state.pending_audio_bytes = None
 if "selected_language" not in st.session_state:
     st.session_state.selected_language = "auto"
-if "typing_status" not in st.session_state:
-    st.session_state.typing_status = "idle"
 if "all_conversations" not in st.session_state:
-    st.session_state.all_conversations = []  # Store all conversations for history
-if "current_conversation_index" not in st.session_state:
-    st.session_state.current_conversation_index = -1
+    st.session_state.all_conversations = []
 
 # ============================================
 # 🔊 AUTOPLAY AUDIO
@@ -521,6 +509,17 @@ div[data-testid="stButton"] button:hover {
     transform: translateY(-1px) !important;
     box-shadow: 0 6px 20px rgba(239,68,68,0.12) !important;
 }
+/* New Conversation button - Green */
+div[data-testid="stButton"] button[kind="primary"] {
+    background: linear-gradient(135deg, #10B981, #059669) !important;
+    border: 1px solid rgba(16,185,129,0.3) !important;
+    color: #FFFFFF !important;
+}
+div[data-testid="stButton"] button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #059669, #047857) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(16,185,129,0.3) !important;
+}
 div[data-testid="stDownloadButton"] button {
     background: rgba(52,211,153,0.06) !important;
     border: 1px solid rgba(52,211,153,0.18) !important;
@@ -558,6 +557,14 @@ div[data-testid="stDownloadButton"] button:hover {
 .css-1d391kg .stMarkdown {
     color: #CBD5E1 !important;
 }
+.css-1d391kg .stButton button {
+    background: rgba(99,102,241,0.1) !important;
+    border: 1px solid rgba(99,102,241,0.15) !important;
+    color: #A78BFA !important;
+}
+.css-1d391kg .stButton button:hover {
+    background: rgba(99,102,241,0.2) !important;
+}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 3px; }
@@ -579,7 +586,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# 💬 UNIFIED SCROLLABLE CHAT WINDOW
+# 💬 CHAT WINDOW
 # ============================================
 def build_chat_html(conversation, current_user, current_ai):
     all_entries = []
@@ -648,7 +655,7 @@ st.markdown("""
 audio_input = st.audio_input("Voice Input", key="voice_stream_bridge", label_visibility="collapsed")
 
 # ============================================
-# ⚡ PROCESSING BLOCK
+# ⚡ PROCESSING
 # ============================================
 if audio_input is not None:
     audio_bytes = audio_input.getvalue()
@@ -702,7 +709,7 @@ if audio_input is not None:
                 st.error("Could not detect voice. Please try again.")
 
 # ============================================
-# 📥 HISTORY & EXPORT
+# 📥 BUTTONS - Clear, New, Export
 # ============================================
 if st.session_state.conversation:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -718,16 +725,14 @@ if st.session_state.conversation:
             save_history([])
             st.rerun()
     with col2:
-        # New Conversation button - saves current conversation to history
-        if st.button("✨ New Conversation", use_container_width=True):
+        # New Conversation button - Green color
+        if st.button("✨ New Conversation", use_container_width=True, type="primary"):
             if st.session_state.conversation:
-                # Save current conversation to all_conversations
                 st.session_state.all_conversations.append({
                     "timestamp": datetime.now().strftime("%I:%M %p, %d %b"),
                     "conversation": st.session_state.conversation.copy(),
                     "messages": st.session_state.chat_messages.copy()
                 })
-                # Clear current conversation
                 st.session_state.conversation = []
                 st.session_state.chat_messages = []
                 st.session_state.current_user_text = ""
@@ -737,17 +742,14 @@ if st.session_state.conversation:
                 save_history([])
                 st.rerun()
     with col3:
-        # Export All Conversations
         if st.session_state.all_conversations or st.session_state.conversation:
             all_text = []
-            # Add current conversation
             if st.session_state.conversation:
                 all_text.append("=== Current Conversation ===")
                 for entry in st.session_state.conversation:
                     all_text.append(f"{entry.get('timestamp', '')} - You: {entry.get('user', '')}")
                     all_text.append(f"{entry.get('timestamp', '')} - AI: {entry.get('ai', '')}")
                     all_text.append("")
-            # Add saved conversations
             if st.session_state.all_conversations:
                 for idx, conv in enumerate(st.session_state.all_conversations):
                     all_text.append(f"\n=== Conversation {idx+1} ({conv.get('timestamp', '')}) ===")
@@ -766,7 +768,7 @@ if st.session_state.conversation:
             )
 
 # ============================================
-# 🎯 SIDEBAR – Language Selection & Saved Conversations
+# 🎯 SIDEBAR
 # ============================================
 with st.sidebar:
     st.markdown("### 🌐 Language Settings")
@@ -794,21 +796,7 @@ with st.sidebar:
     )
     if selected_lang != st.session_state.selected_language:
         st.session_state.selected_language = selected_lang
-        # Clear current conversation when language changes
-        if st.session_state.conversation:
-            # Save current conversation before clearing
-            st.session_state.all_conversations.append({
-                "timestamp": datetime.now().strftime("%I:%M %p, %d %b"),
-                "conversation": st.session_state.conversation.copy(),
-                "messages": st.session_state.chat_messages.copy()
-            })
-        st.session_state.conversation = []
-        st.session_state.chat_messages = []
-        st.session_state.current_user_text = ""
-        st.session_state.current_ai_text = ""
-        st.session_state.last_processed_audio = None
-        st.session_state.pending_audio_bytes = None
-        save_history([])
+        # Language change: conversation stays, only language changes
         st.rerun()
     
     st.markdown("---")
@@ -820,7 +808,15 @@ with st.sidebar:
     st.markdown("### 📜 Saved Conversations")
     if st.session_state.all_conversations:
         for idx, conv in enumerate(st.session_state.all_conversations):
-            st.caption(f"📁 {idx+1}. {conv.get('timestamp', '')}")
+            if st.button(f"📁 {idx+1}. {conv.get('timestamp', '')}", key=f"conv_{idx}", use_container_width=True):
+                # Load saved conversation
+                st.session_state.conversation = conv.get('conversation', [])
+                st.session_state.chat_messages = conv.get('messages', [])
+                if st.session_state.conversation:
+                    last = st.session_state.conversation[-1]
+                    st.session_state.current_user_text = last.get('user', '')
+                    st.session_state.current_ai_text = last.get('ai', '')
+                st.rerun()
     else:
         st.caption("No saved conversations yet.")
     
