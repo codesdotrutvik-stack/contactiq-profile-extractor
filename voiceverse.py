@@ -16,6 +16,7 @@ MISTRAL_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
 
 aai.settings.api_key = ASSEMBLYAI_KEY
 HISTORY_FILE = "voiceverse_history.json"
+SAVED_HISTORY_FILE = "saved_conversations.json"
 
 # ============================================
 # 🧠 CORE FUNCTIONS
@@ -33,6 +34,22 @@ def save_history(history):
     try:
         with open(HISTORY_FILE, "w") as f:
             json.dump(history[-50:], f, indent=2)
+    except:
+        pass
+
+def load_saved_conversations():
+    try:
+        if os.path.exists(SAVED_HISTORY_FILE):
+            with open(SAVED_HISTORY_FILE, "r") as f:
+                return json.load(f)
+        return []
+    except:
+        return []
+
+def save_saved_conversations(conversations):
+    try:
+        with open(SAVED_HISTORY_FILE, "w") as f:
+            json.dump(conversations[-50:], f, indent=2)
     except:
         pass
 
@@ -186,7 +203,7 @@ if "pending_audio_bytes" not in st.session_state:
 if "selected_language" not in st.session_state:
     st.session_state.selected_language = "auto"
 if "all_conversations" not in st.session_state:
-    st.session_state.all_conversations = []
+    st.session_state.all_conversations = load_saved_conversations()
 
 # ============================================
 # 🔊 AUTOPLAY AUDIO
@@ -509,15 +526,15 @@ div[data-testid="stButton"] button:hover {
     transform: translateY(-1px) !important;
     box-shadow: 0 6px 20px rgba(239,68,68,0.12) !important;
 }
-/* New Conversation button - Green */
+/* New Conversation button - Indigo */
 div[data-testid="stButton"] button[kind="primary"] {
-     background: linear-gradient(135deg, #4F46E5, #4338CA) !important;
+    background: linear-gradient(135deg, #4F46E5, #4338CA) !important;
     border: 1px solid rgba(79,70,229,0.3) !important;
     color: #FFFFFF !important;
 }
 div[data-testid="stButton"] button[kind="primary"]:hover {
-    transform: translateY(-1px) !important;
     background: linear-gradient(135deg, #4338CA, #3730A3) !important;
+    transform: translateY(-1px) !important;
     box-shadow: 0 6px 20px rgba(79,70,229,0.3) !important;
 }
 div[data-testid="stDownloadButton"] button {
@@ -725,7 +742,6 @@ if st.session_state.conversation:
             save_history([])
             st.rerun()
     with col2:
-        # New Conversation button - Green color
         if st.button("✨ New Conversation", use_container_width=True, type="primary"):
             if st.session_state.conversation:
                 st.session_state.all_conversations.append({
@@ -733,6 +749,7 @@ if st.session_state.conversation:
                     "conversation": st.session_state.conversation.copy(),
                     "messages": st.session_state.chat_messages.copy()
                 })
+                save_saved_conversations(st.session_state.all_conversations)
                 st.session_state.conversation = []
                 st.session_state.chat_messages = []
                 st.session_state.current_user_text = ""
@@ -795,8 +812,23 @@ with st.sidebar:
         index=lang_options.index(st.session_state.selected_language)
     )
     if selected_lang != st.session_state.selected_language:
+        # Save current conversation before language change
+        if st.session_state.conversation:
+            st.session_state.all_conversations.append({
+                "timestamp": datetime.now().strftime("%I:%M %p, %d %b"),
+                "conversation": st.session_state.conversation.copy(),
+                "messages": st.session_state.chat_messages.copy()
+            })
+            save_saved_conversations(st.session_state.all_conversations)
+        
         st.session_state.selected_language = selected_lang
-        # Language change: conversation stays, only language changes
+        st.session_state.conversation = []
+        st.session_state.chat_messages = []
+        st.session_state.current_user_text = ""
+        st.session_state.current_ai_text = ""
+        st.session_state.last_processed_audio = None
+        st.session_state.pending_audio_bytes = None
+        save_history([])
         st.rerun()
     
     st.markdown("---")
@@ -809,7 +841,6 @@ with st.sidebar:
     if st.session_state.all_conversations:
         for idx, conv in enumerate(st.session_state.all_conversations):
             if st.button(f"📁 {idx+1}. {conv.get('timestamp', '')}", key=f"conv_{idx}", use_container_width=True):
-                # Load saved conversation
                 st.session_state.conversation = conv.get('conversation', [])
                 st.session_state.chat_messages = conv.get('messages', [])
                 if st.session_state.conversation:
