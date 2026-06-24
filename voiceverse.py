@@ -50,16 +50,64 @@ def save_saved_conversations(conversations):
     except: pass
 
 def speech_to_text(audio_bytes):
-    temp_file = "temp_voice_input.wav"
+    """
+    Transcribe audio bytes using AssemblyAI.
+    Returns text string or raises descriptive exception.
+    """
+    # Validate audio bytes
+    if not audio_bytes or len(audio_bytes) < 100:
+        st.error("⚠️ Audio too short or empty. Please record again.")
+        return None
+
+    import tempfile
+    # Use a proper temp file with unique name to avoid conflicts
+    tmp = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".wav",
+        prefix="vv_audio_"
+    )
+    temp_path = tmp.name
     try:
-        with open(temp_file, "wb") as f:
-            f.write(audio_bytes)
-        transcriber = aai.Transcriber()
-        transcript  = transcriber.transcribe(temp_file)
-        return transcript.text if transcript.text else None
-    except: return None
+        tmp.write(audio_bytes)
+        tmp.flush()
+        tmp.close()
+
+        # Verify file written correctly
+        file_size = os.path.getsize(temp_path)
+        if file_size < 100:
+            st.error(f"⚠️ Audio file too small ({file_size} bytes). Speak louder.")
+            return None
+
+        # AssemblyAI transcribe
+        config = aai.TranscriptionConfig(
+            speech_model=aai.SpeechModel.best
+        )
+        transcriber = aai.Transcriber(config=config)
+        transcript  = transcriber.transcribe(temp_path)
+
+        # Check status
+        if transcript.status == aai.TranscriptStatus.error:
+            st.error(f"⚠️ AssemblyAI error: {transcript.error}")
+            return None
+
+        if not transcript.text or transcript.text.strip() == "":
+            st.warning("⚠️ No speech detected. Please speak clearly and try again.")
+            return None
+
+        return transcript.text.strip()
+
+    except aai.AssemblyAIError as e:
+        st.error(f"⚠️ AssemblyAI API error: {str(e)}")
+        return None
+    except Exception as e:
+        st.error(f"⚠️ Transcription failed: {type(e).__name__}: {str(e)}")
+        return None
     finally:
-        if os.path.exists(temp_file): os.remove(temp_file)
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except:
+            pass
 
 def detect_language(text):
     for char in text:
@@ -534,26 +582,27 @@ if audio_input is not None:
                     </div>
                 </div>""", unsafe_allow_html=True)
 
-                lang_setting = st.session_state.get("selected_language","auto")
+                lang_setting = st.session_state.get("selected_language", "auto")
                 ai_response  = get_ai_response(user_text, st.session_state.chat_messages, lang_setting)
                 typing_ph.empty()
                 ai_audio = text_to_speech(ai_response, lang_setting if lang_setting != "auto" else None)
 
-                st.session_state.chat_messages.append({"role":"user","content":user_text})
-                st.session_state.chat_messages.append({"role":"assistant","content":ai_response})
+                st.session_state.chat_messages.append({"role": "user",      "content": user_text})
+                st.session_state.chat_messages.append({"role": "assistant", "content": ai_response})
                 st.session_state.current_user_text = user_text
                 st.session_state.current_ai_text   = ai_response
                 st.session_state.conversation.append({
                     "timestamp": datetime.now().strftime("%I:%M %p"),
-                    "user": user_text, "ai": ai_response
+                    "user": user_text,
+                    "ai":   ai_response
                 })
                 save_history(st.session_state.conversation)
                 if ai_audio:
                     st.session_state.pending_audio_bytes = ai_audio
                 st.rerun()
             else:
+                # Error already shown inside speech_to_text()
                 typing_ph.empty()
-                st.error("⚠️ Could not detect voice. Please try again.")
 
 # ============================================
 # ACTION BUTTONS
