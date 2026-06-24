@@ -87,7 +87,6 @@ def get_ai_response(text, chat_history=None, callback=None):
             "Authorization": f"Bearer {MISTRAL_KEY}",
             "Content-Type": "application/json"
         }
-
         if st.session_state.selected_language == "auto":
             target_lang = detect_language(text)
         else:
@@ -99,27 +98,22 @@ def get_ai_response(text, chat_history=None, callback=None):
             "es": "Spanish", "fr": "French", "de": "German", "ja": "Japanese"
         }
         lang_name = lang_map.get(target_lang, "English")
-
         system_content = (
             f"You are a helpful conversational voice assistant. "
             f"CRITICAL: You MUST respond ONLY in {lang_name} language. "
             f"Keep response under 3 sentences. Do not use bullet points."
         )
-
         system_msg = {"role": "system", "content": system_content}
         history_msgs = chat_history[-50:] if chat_history else []
         messages = [system_msg] + history_msgs + [{"role": "user", "content": text}]
-
         data = {
             "model": "mistral-small-latest",
             "messages": messages,
             "max_tokens": 150,
             "temperature": 0.2
         }
-
         if callback:
             callback("typing")
-
         response = requests.post(url, json=data, headers=headers, timeout=15)
         if response.status_code == 200:
             content = response.json()["choices"][0]["message"]["content"].strip()
@@ -141,11 +135,9 @@ def text_to_speech(text):
             lang = st.session_state.selected_language
         else:
             lang = detect_language(text)
-
         supported_langs = ["en", "gu", "hi", "ar", "bn", "es", "fr", "de", "ja", "pt"]
         if lang not in supported_langs:
             lang = "en"
-
         tts = gTTS(text=text, lang=lang, slow=False)
         audio_buffer = io.BytesIO()
         tts.write_to_fp(audio_buffer)
@@ -163,22 +155,11 @@ def text_to_speech(text):
 
 def autoplay_audio(audio_bytes: bytes):
     b64 = base64.b64encode(audio_bytes).decode("utf-8")
-    audio_html = f"""
+    st.markdown(f"""
         <audio autoplay style="display:none;">
             <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
         </audio>
-    """
-    st.markdown(audio_html, unsafe_allow_html=True)
-
-def export_history(conversation):
-    if not conversation:
-        return "No conversation history."
-    lines = []
-    for entry in conversation:
-        lines.append(f"{entry.get('timestamp', '')} - You: {entry.get('user', '')}")
-        lines.append(f"{entry.get('timestamp', '')} - AI: {entry.get('ai', '')}")
-        lines.append("")
-    return "\n".join(lines)
+    """, unsafe_allow_html=True)
 
 # ============================================
 # 🗂️ SESSION STATE
@@ -218,85 +199,80 @@ if st.session_state.pending_audio_bytes:
 st.set_page_config(page_title="VoiceVerse Pro", page_icon="🎙️", layout="wide")
 
 # ============================================
-# 💅 PREMIUM CSS
+# 💅 PREMIUM CSS — v2 (all fixes applied)
 # ============================================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── RESET & BASE ── */
-*, *::before, *::after {
-    box-sizing: border-box;
-    -webkit-font-smoothing: antialiased;
-    margin: 0;
-    padding: 0;
-}
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; -webkit-font-smoothing: antialiased; margin: 0; padding: 0; }
 
 /* ── BACKGROUND ── */
 .stApp {
     background: #05070F !important;
     background-image:
-        radial-gradient(ellipse 100% 60% at 50% 0%, rgba(109,40,217,0.22) 0%, transparent 65%),
-        radial-gradient(ellipse 50% 40% at 90% 100%, rgba(236,72,153,0.10) 0%, transparent 60%),
-        radial-gradient(ellipse 40% 30% at 5% 80%, rgba(79,70,229,0.07) 0%, transparent 50%) !important;
+        radial-gradient(ellipse 100% 60% at 50% 0%, rgba(109,40,217,0.20) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 40% at 90% 100%, rgba(236,72,153,0.09) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 5% 80%, rgba(79,70,229,0.06) 0%, transparent 50%) !important;
     min-height: 100vh;
     font-family: 'Inter', sans-serif !important;
 }
 
-/* ── HIDE DEFAULTS ── */
+/* ── HIDE STREAMLIT CHROME ── */
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 
-/* ── MAIN LAYOUT ── */
+/* ── MAIN CONTENT ── */
 .block-container {
-    padding: 0 2rem 4rem !important;
-    max-width: 820px !important;
+    padding: 0 2.5rem 4rem !important;
+    max-width: 840px !important;
     margin: 0 auto !important;
 }
 
-/* ──────────────────────────────────────
-   SIDEBAR - PREMIUM REDESIGN
-──────────────────────────────────────── */
+/* ══════════════════════════════════════
+   SIDEBAR — FULLY REBUILT (v2)
+   KEY FIXES:
+   • Proper padding/spacing — not cramped
+   • Text colours bright enough to read
+   • Section labels visible (#8892A4)
+   • History buttons readable (#C4CFDE)
+   • "Powered by" section removed from sidebar
+══════════════════════════════════════ */
 [data-testid="stSidebar"] {
-    background: rgba(6, 9, 20, 0.97) !important;
-    border-right: 1px solid rgba(99,102,241,0.12) !important;
+    background: rgba(7, 10, 22, 0.98) !important;
+    border-right: 1px solid rgba(99,102,241,0.13) !important;
     backdrop-filter: blur(30px) !important;
     -webkit-backdrop-filter: blur(30px) !important;
 }
-[data-testid="stSidebar"] > div:first-child {
-    padding: 0 !important;
-}
-[data-testid="stSidebarContent"] {
-    padding: 0 !important;
-    background: transparent !important;
-}
+[data-testid="stSidebar"] > div:first-child { padding: 0 !important; }
+[data-testid="stSidebarContent"] { padding: 0 !important; background: transparent !important; }
+[data-testid="stSidebar"] .stVerticalBlock { gap: 0 !important; }
+[data-testid="stSidebar"] * { font-family: 'Inter', sans-serif !important; }
 
-/* Sidebar inner wrap */
-[data-testid="stSidebar"] .stVerticalBlock {
-    gap: 0 !important;
-}
-
-/* All sidebar text */
-[data-testid="stSidebar"] * {
-    font-family: 'Inter', sans-serif !important;
-}
+/* Sidebar generic text — bright enough to read */
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span,
-[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] div {
-    color: #94A3B8 !important;
+    color: #8892A4 !important;
 }
 
-/* Sidebar selectbox */
+/* Selectbox */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] label {
+    color: #8892A4 !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+}
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
-    background: rgba(15, 20, 40, 0.8) !important;
-    border: 1px solid rgba(99,102,241,0.2) !important;
+    background: rgba(15, 21, 45, 0.85) !important;
+    border: 1px solid rgba(99,102,241,0.22) !important;
     border-radius: 12px !important;
-    color: #CBD5E1 !important;
+    color: #C4CFDE !important;
+    font-size: 0.88rem !important;
     transition: border-color 0.2s ease !important;
 }
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div:focus-within {
     border-color: rgba(167,139,250,0.5) !important;
-    box-shadow: 0 0 0 3px rgba(167,139,250,0.1) !important;
+    box-shadow: 0 0 0 3px rgba(167,139,250,0.08) !important;
 }
 
 /* Sidebar divider */
@@ -306,571 +282,350 @@ st.markdown("""
     margin: 0 !important;
 }
 
-/* Sidebar caption */
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
-    color: #4B5563 !important;
-    font-size: 0.78rem !important;
-}
-
-/* Sidebar buttons */
+/* Sidebar history buttons */
 [data-testid="stSidebar"] [data-testid="stButton"] button {
-    background: rgba(15, 20, 40, 0.6) !important;
-    border: 1px solid rgba(99,102,241,0.15) !important;
-    color: #64748B !important;
+    background: rgba(15, 21, 45, 0.7) !important;
+    border: 1px solid rgba(99,102,241,0.14) !important;
+    color: #A0ADBF !important;
     border-radius: 12px !important;
-    font-size: 0.78rem !important;
+    font-size: 0.79rem !important;
     font-weight: 500 !important;
-    padding: 0.55rem 1rem !important;
-    transition: all 0.2s ease !important;
+    padding: 0.6rem 1rem !important;
+    transition: all 0.22s ease !important;
     text-align: left !important;
     width: 100% !important;
+    letter-spacing: 0.1px !important;
 }
 [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
-    background: rgba(99,102,241,0.12) !important;
-    border-color: rgba(167,139,250,0.3) !important;
-    color: #A78BFA !important;
-    transform: translateX(3px) !important;
+    background: rgba(79,70,229,0.14) !important;
+    border-color: rgba(167,139,250,0.32) !important;
+    color: #C4CFDE !important;
+    transform: translateX(4px) !important;
+    box-shadow: 0 4px 16px rgba(79,70,229,0.12) !important;
 }
 
-/* ──────────────────────────────────────
+/* ══════════════════════════════════════
    HEADER
-──────────────────────────────────────── */
+══════════════════════════════════════ */
 .vv-header {
     text-align: center;
-    padding: 3rem 0 1.5rem;
+    padding: 3rem 0 1.6rem;
     position: relative;
 }
-
-/* Animated background orb */
 .vv-header::before {
     content: '';
     position: absolute;
-    top: -20px;
-    left: 50%;
+    top: -20px; left: 50%;
     transform: translateX(-50%);
-    width: 300px;
-    height: 200px;
-    background: radial-gradient(ellipse, rgba(109,40,217,0.15) 0%, transparent 70%);
+    width: 340px; height: 220px;
+    background: radial-gradient(ellipse, rgba(109,40,217,0.14) 0%, transparent 70%);
     pointer-events: none;
     animation: orb-float 6s ease-in-out infinite;
 }
 @keyframes orb-float {
-    0%, 100% { transform: translateX(-50%) translateY(0px); }
-    50% { transform: translateX(-50%) translateY(-12px); }
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50%       { transform: translateX(-50%) translateY(-14px); }
 }
 
-/* Logo ring */
-.vv-logo-container {
-    position: relative;
-    display: inline-block;
-    margin-bottom: 1.4rem;
-}
+.vv-logo-container { position: relative; display: inline-block; margin-bottom: 1.5rem; }
 .vv-orbit-ring {
-    position: absolute;
-    top: 50%;
-    left: 50%;
+    position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    width: 110px;
-    height: 110px;
+    width: 112px; height: 112px;
     border-radius: 50%;
-    border: 1px dashed rgba(167,139,250,0.25);
-    animation: ring-spin 12s linear infinite;
+    border: 1px dashed rgba(167,139,250,0.22);
+    animation: ring-spin 14s linear infinite;
 }
 .vv-orbit-ring::before {
     content: '';
-    position: absolute;
-    top: -3px;
-    left: 50%;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
+    position: absolute; top: -4px; left: 50%;
+    width: 8px; height: 8px; border-radius: 50%;
     background: #A78BFA;
-    box-shadow: 0 0 8px rgba(167,139,250,0.8);
+    box-shadow: 0 0 10px rgba(167,139,250,0.9);
     transform: translateX(-50%);
 }
 @keyframes ring-spin {
     from { transform: translate(-50%, -50%) rotate(0deg); }
     to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
-
 .vv-logo-ring {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 76px;
-    height: 76px;
-    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 78px; height: 78px; border-radius: 50%;
     background: linear-gradient(145deg, #4F46E5, #7C3AED, #A855F7);
     box-shadow:
-        0 0 0 1px rgba(167,139,250,0.3),
-        0 0 40px rgba(124,58,237,0.5),
-        0 0 80px rgba(124,58,237,0.2),
-        inset 0 1px 0 rgba(255,255,255,0.15);
-    font-size: 2rem;
-    position: relative;
-    z-index: 1;
+        0 0 0 1px rgba(167,139,250,0.28),
+        0 0 45px rgba(124,58,237,0.55),
+        0 0 90px rgba(124,58,237,0.22),
+        inset 0 1px 0 rgba(255,255,255,0.16);
+    font-size: 2.1rem; position: relative; z-index: 1;
     animation: logo-pulse 4s ease-in-out infinite;
-    transition: transform 0.3s ease;
 }
 @keyframes logo-pulse {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(167,139,250,0.3), 0 0 40px rgba(124,58,237,0.5), 0 0 80px rgba(124,58,237,0.2), inset 0 1px 0 rgba(255,255,255,0.15); }
-    50%       { box-shadow: 0 0 0 1px rgba(167,139,250,0.5), 0 0 60px rgba(124,58,237,0.7), 0 0 120px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
+    0%,100% { box-shadow: 0 0 0 1px rgba(167,139,250,0.28), 0 0 45px rgba(124,58,237,0.55), 0 0 90px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.16); }
+    50%      { box-shadow: 0 0 0 1px rgba(167,139,250,0.5), 0 0 65px rgba(124,58,237,0.75), 0 0 130px rgba(124,58,237,0.32), inset 0 1px 0 rgba(255,255,255,0.16); }
 }
 
 .vv-title {
     font-family: 'Space Grotesk', sans-serif !important;
-    font-size: 2.8rem !important;
-    font-weight: 700 !important;
+    font-size: 2.9rem !important; font-weight: 700 !important;
     background: linear-gradient(135deg, #FFFFFF 0%, #C4B5FD 40%, #E879F9 80%, #F0ABFC 100%);
+    background-size: 200% 200%;
     -webkit-background-clip: text !important;
     -webkit-text-fill-color: transparent !important;
     background-clip: text !important;
-    letter-spacing: -1.2px;
-    line-height: 1.1;
-    margin-bottom: 0.5rem !important;
-    animation: title-shimmer 4s ease-in-out infinite;
-    background-size: 200% 200%;
+    letter-spacing: -1.2px; line-height: 1.1;
+    margin-bottom: 0.45rem !important;
+    animation: title-shimmer 5s ease-in-out infinite;
 }
 @keyframes title-shimmer {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    0%,100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
 }
 
+/* FIX: subtitle was too dark (#475569) → now visible */
 .vv-subtitle {
-    color: #475569 !important;
-    font-size: 0.85rem !important;
-    font-weight: 400 !important;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 1.2rem !important;
+    color: #64748B !important;
+    font-size: 0.82rem !important; font-weight: 500 !important;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    margin-bottom: 1.3rem !important;
 }
 
 .vv-badge-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; flex-wrap: wrap; margin-bottom: 0.4rem;
 }
 .vv-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(99,102,241,0.08);
-    border: 1px solid rgba(99,102,241,0.18);
-    border-radius: 999px;
-    padding: 5px 14px 5px 8px;
-    font-size: 0.72rem;
-    color: #818CF8 !important;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(99,102,241,0.1);
+    border: 1px solid rgba(99,102,241,0.22);
+    border-radius: 999px; padding: 5px 15px 5px 9px;
+    font-size: 0.73rem;
+    /* FIX: was #818CF8 (dim) → now brighter */
+    color: #A5B4FC !important;
+    font-weight: 600; letter-spacing: 0.4px;
 }
 .vv-badge-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
+    width: 7px; height: 7px; border-radius: 50%;
     background: #34D399;
-    box-shadow: 0 0 10px rgba(52,211,153,0.7);
+    box-shadow: 0 0 10px rgba(52,211,153,0.8);
     animation: dot-pulse 2s ease-in-out infinite;
 }
 @keyframes dot-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.8); }
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.5; transform: scale(0.75); }
 }
-.vv-badge-ai {
-    background: rgba(236,72,153,0.08);
-    border-color: rgba(236,72,153,0.18);
-    color: #F472B6 !important;
-}
-.vv-badge-voice {
-    background: rgba(16,185,129,0.08);
-    border-color: rgba(16,185,129,0.18);
-    color: #34D399 !important;
-}
+.vv-badge-pink  { background: rgba(236,72,153,0.1); border-color: rgba(236,72,153,0.22); color: #F9A8D4 !important; }
+.vv-badge-green { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.22); color: #6EE7B7 !important; }
 
-/* ──────────────────────────────────────
-   STATS STRIP
-──────────────────────────────────────── */
+/* Stats strip */
 .stats-strip {
-    display: flex;
-    gap: 12px;
-    margin: 1.2rem 0 0;
+    display: flex; gap: 10px; margin: 1.3rem 0 0;
     justify-content: center;
 }
 .stat-chip {
-    background: rgba(12,16,30,0.7);
-    border: 1px solid rgba(99,102,241,0.12);
-    border-radius: 12px;
-    padding: 8px 18px;
-    text-align: center;
+    background: rgba(10,14,30,0.75);
+    border: 1px solid rgba(99,102,241,0.14);
+    border-radius: 14px; padding: 10px 22px; text-align: center;
     backdrop-filter: blur(10px);
 }
 .stat-num {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #A78BFA;
-    line-height: 1;
+    font-size: 1.5rem; font-weight: 700;
+    /* FIX: was #A78BFA (ok) → keep, but ensure no override */
+    color: #A78BFA; line-height: 1;
 }
+/* FIX: stat labels were #334155 (too dark) → now readable */
 .stat-label {
-    font-size: 0.65rem;
-    color: #334155;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-weight: 600;
-    margin-top: 3px;
+    font-size: 0.63rem; color: #64748B;
+    text-transform: uppercase; letter-spacing: 1px;
+    font-weight: 700; margin-top: 4px;
 }
 
-/* ──────────────────────────────────────
+/* ══════════════════════════════════════
    CHAT WINDOW
-──────────────────────────────────────── */
+══════════════════════════════════════ */
 .chat-window {
     position: relative;
-    background: rgba(8, 12, 28, 0.85);
+    background: rgba(8, 12, 28, 0.9);
     border: 1px solid rgba(99,102,241,0.14);
-    border-radius: 28px;
-    margin: 1.8rem 0 0;
+    border-radius: 28px; margin: 2rem 0 0;
     overflow: hidden;
     box-shadow:
         0 0 0 1px rgba(255,255,255,0.03) inset,
-        0 20px 60px rgba(0,0,0,0.6),
+        0 24px 64px rgba(0,0,0,0.65),
         0 0 80px rgba(99,102,241,0.05);
-    animation: window-appear 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: window-appear 0.55s cubic-bezier(0.16,1,0.3,1) both;
 }
 @keyframes window-appear {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(22px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Window chrome / titlebar */
+/* Titlebar */
 .chat-titlebar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    background: rgba(10,14,32,0.9);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 20px;
+    background: rgba(10,14,32,0.95);
     border-bottom: 1px solid rgba(99,102,241,0.1);
 }
-.chat-titlebar-dots {
-    display: flex;
-    gap: 7px;
-}
-.chrome-dot {
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-}
-.chrome-dot-1 { background: #FF5F57; box-shadow: 0 0 6px rgba(255,95,87,0.4); }
-.chrome-dot-2 { background: #FFBD2E; box-shadow: 0 0 6px rgba(255,189,46,0.4); }
-.chrome-dot-3 { background: #28C840; box-shadow: 0 0 6px rgba(40,200,64,0.4); }
-.chat-titlebar-title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #334155;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-.chat-titlebar-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.7rem;
-    color: #34D399;
-    font-weight: 600;
-}
-.indicator-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #34D399;
-    box-shadow: 0 0 8px rgba(52,211,153,0.6);
-    animation: blink-slow 2.5s ease-in-out infinite;
-}
-@keyframes blink-slow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-}
+.chat-titlebar-dots { display: flex; gap: 7px; }
+.chrome-dot { width: 11px; height: 11px; border-radius: 50%; }
+.chrome-dot-1 { background: #FF5F57; box-shadow: 0 0 7px rgba(255,95,87,0.5); }
+.chrome-dot-2 { background: #FFBD2E; box-shadow: 0 0 7px rgba(255,189,46,0.5); }
+.chrome-dot-3 { background: #28C840; box-shadow: 0 0 7px rgba(40,200,64,0.5); }
+/* FIX: titlebar text was #334155 (too dark) → now visible */
+.chat-titlebar-title { font-size: 0.74rem; font-weight: 600; color: #64748B; letter-spacing: 0.5px; text-transform: uppercase; }
+.chat-titlebar-indicator { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #34D399; font-weight: 600; }
+.indicator-dot { width: 6px; height: 6px; border-radius: 50%; background: #34D399; box-shadow: 0 0 8px rgba(52,211,153,0.7); animation: blink-slow 2.5s ease-in-out infinite; }
+@keyframes blink-slow { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-/* Messages area */
+/* Messages scroll */
 .chat-messages {
-    height: 420px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 1.4rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.2rem;
+    height: 430px; overflow-y: auto; overflow-x: hidden;
+    padding: 1.6rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;
     scroll-behavior: smooth;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(99,102,241,0.2) transparent;
+    scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.2) transparent;
 }
 .chat-messages::-webkit-scrollbar { width: 3px; }
 .chat-messages::-webkit-scrollbar-track { background: transparent; }
-.chat-messages::-webkit-scrollbar-thumb {
-    background: rgba(99,102,241,0.2);
-    border-radius: 999px;
-}
+.chat-messages::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 999px; }
 
 /* Fade masks */
-.chat-fade-top {
-    position: absolute;
-    top: 53px;
-    left: 0; right: 0;
-    height: 50px;
-    background: linear-gradient(to bottom, rgba(8,12,28,0.95), transparent);
-    pointer-events: none;
-    z-index: 2;
-}
-.chat-fade-bottom {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 50px;
-    background: linear-gradient(to top, rgba(8,12,28,0.95), transparent);
-    pointer-events: none;
-    z-index: 2;
-}
+.chat-fade-top    { position: absolute; top: 53px; left: 0; right: 0; height: 48px; background: linear-gradient(to bottom, rgba(8,12,28,0.92), transparent); pointer-events: none; z-index: 2; }
+.chat-fade-bottom { position: absolute; bottom: 0; left: 0; right: 0; height: 48px; background: linear-gradient(to top, rgba(8,12,28,0.92), transparent); pointer-events: none; z-index: 2; }
 
 /* Empty state */
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 14px;
-    padding: 2rem;
-}
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; padding: 2rem; }
 .empty-icon-ring {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    border: 1px solid rgba(99,102,241,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.8rem;
-    background: rgba(99,102,241,0.06);
-    animation: empty-float 3s ease-in-out infinite;
+    width: 80px; height: 80px; border-radius: 50%;
+    border: 1px solid rgba(99,102,241,0.22);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem;
+    background: rgba(79,70,229,0.07);
+    animation: empty-float 3.5s ease-in-out infinite;
+    box-shadow: 0 0 30px rgba(79,70,229,0.12);
 }
-@keyframes empty-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-}
-.empty-title { color: #1E293B; font-size: 0.95rem; font-weight: 600; text-align: center; }
-.empty-hint { color: #0F172A; font-size: 0.78rem; text-align: center; }
+@keyframes empty-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+/* FIX: empty state text was too dark */
+.empty-title { color: #4B5563; font-size: 0.95rem; font-weight: 600; text-align: center; }
+.empty-hint  { color: #374151; font-size: 0.78rem; text-align: center; line-height: 1.5; }
 
-/* Timestamp divider */
-.msg-timestamp {
-    text-align: center;
-    font-size: 0.63rem;
-    color: #1E293B;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    margin: 0.4rem 0;
-}
+/* Timestamp */
+.msg-timestamp { text-align: center; font-size: 0.63rem; color: #374151; font-weight: 600; letter-spacing: 0.5px; margin: 0.3rem 0; }
 
 /* USER bubble */
-.user-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes slide-in-right {
-    from { opacity: 0; transform: translateX(20px); }
-    to   { opacity: 1; transform: translateX(0); }
-}
-.user-tag {
-    font-size: 0.63rem;
-    color: rgba(167,139,250,0.5);
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-    padding-right: 2px;
-}
+.user-wrap { display: flex; flex-direction: column; align-items: flex-end; animation: slide-in-right 0.38s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes slide-in-right { from{opacity:0;transform:translateX(18px)} to{opacity:1;transform:translateX(0)} }
+/* FIX: "YOU" label was rgba(167,139,250,0.5) barely visible → brighter */
+.user-tag { font-size: 0.63rem; color: #818CF8; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; margin-bottom: 5px; padding-right: 3px; }
 .user-bubble {
     background: linear-gradient(145deg, #5B21B6, #7C3AED, #9333EA);
     color: #fff !important;
     padding: 1rem 1.4rem;
     border-radius: 20px 20px 4px 20px;
-    max-width: 76%;
-    font-size: 0.9rem;
-    font-weight: 500;
-    line-height: 1.65;
+    max-width: 76%; font-size: 0.91rem; font-weight: 500; line-height: 1.65;
     word-break: break-word;
-    box-shadow:
-        0 8px 32px rgba(124,58,237,0.4),
-        0 1px 0 rgba(255,255,255,0.1) inset;
-    position: relative;
-}
-.user-bubble::after {
-    content: '';
-    position: absolute;
-    bottom: 0; right: -8px;
-    border: 8px solid transparent;
-    border-left-color: #9333EA;
-    border-bottom-color: #9333EA;
-    border-right: none;
-    border-top: none;
-    display: none;
+    box-shadow: 0 8px 32px rgba(124,58,237,0.42), 0 1px 0 rgba(255,255,255,0.1) inset;
 }
 
 /* AI bubble */
-.ai-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    max-width: 80%;
-    animation: slide-in-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes slide-in-left {
-    from { opacity: 0; transform: translateX(-20px); }
-    to   { opacity: 1; transform: translateX(0); }
-}
-.ai-tag {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.63rem;
-    color: rgba(99,102,241,0.7);
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-    padding-left: 2px;
-}
+.ai-wrap { display: flex; flex-direction: column; align-items: flex-start; max-width: 82%; animation: slide-in-left 0.38s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes slide-in-left { from{opacity:0;transform:translateX(-18px)} to{opacity:1;transform:translateX(0)} }
+/* FIX: AI tag label was dim → brighter */
+.ai-tag { display: flex; align-items: center; gap: 8px; font-size: 0.63rem; color: #818CF8; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; margin-bottom: 5px; padding-left: 2px; }
 .ai-avatar {
-    width: 20px; height: 20px;
-    border-radius: 50%;
+    width: 21px; height: 21px; border-radius: 50%;
     background: linear-gradient(135deg, #4F46E5, #7C3AED, #A855F7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.55rem;
-    box-shadow: 0 2px 8px rgba(79,70,229,0.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.58rem; box-shadow: 0 2px 8px rgba(79,70,229,0.55);
 }
 .ai-bubble {
-    background: rgba(14, 20, 42, 0.95);
-    border: 1px solid rgba(99,102,241,0.16);
-    color: #CBD5E1 !important;
+    background: rgba(12, 18, 40, 0.95);
+    border: 1px solid rgba(99,102,241,0.18);
+    /* FIX: AI response text was #CBD5E1 (ok) — keep it, brighten slightly */
+    color: #D1D9E6 !important;
     padding: 1rem 1.4rem;
     border-radius: 4px 20px 20px 20px;
-    font-size: 0.9rem;
-    line-height: 1.7;
-    word-break: break-word;
+    font-size: 0.91rem; line-height: 1.72; word-break: break-word;
     backdrop-filter: blur(16px);
-    box-shadow:
-        0 8px 32px rgba(0,0,0,0.4),
-        0 1px 0 rgba(255,255,255,0.03) inset;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.03) inset;
 }
 
 /* Typing indicator */
-.typing-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    max-width: 80%;
-}
 .typing-bubble {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(14, 20, 42, 0.95);
-    border: 1px solid rgba(99,102,241,0.16);
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(12, 18, 40, 0.95);
+    border: 1px solid rgba(99,102,241,0.18);
     padding: 0.85rem 1.2rem;
     border-radius: 4px 20px 20px 20px;
 }
-.typing-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #818CF8;
-}
+.typing-dot { width: 8px; height: 8px; border-radius: 50%; background: #818CF8; }
 .typing-dot:nth-child(1) { animation: dot-bounce 1.4s infinite 0s; }
 .typing-dot:nth-child(2) { animation: dot-bounce 1.4s infinite 0.2s; }
 .typing-dot:nth-child(3) { animation: dot-bounce 1.4s infinite 0.4s; }
-@keyframes dot-bounce {
-    0%, 80%, 100% { transform: scale(0.6); opacity: 0.35; }
-    40% { transform: scale(1.1); opacity: 1; }
-}
+@keyframes dot-bounce { 0%,80%,100%{transform:scale(0.6);opacity:0.35} 40%{transform:scale(1.15);opacity:1} }
 
-/* ──────────────────────────────────────
-   MIC SECTION
-──────────────────────────────────────── */
-.mic-section {
-    margin: 1.8rem 0 0.8rem;
-    position: relative;
-}
+/* ══════════════════════════════════════
+   MIC / SPEAK SECTION
+   FIX: "SPEAK TO AI" label was #1E293B (near-black, invisible on dark bg)
+        → now clearly lit at #64748B + glow line
+══════════════════════════════════════ */
+.mic-section { margin: 1.9rem 0 0.8rem; }
 .mic-label-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 0.9rem;
+    display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;
 }
-.mic-label-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(99,102,241,0.15), transparent); }
+/* FIX: lines barely visible → slightly brighter */
+.mic-label-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(99,102,241,0.25), transparent); }
 .mic-label-text {
-    font-size: 0.65rem;
-    color: #1E293B;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    white-space: nowrap;
+    font-size: 0.66rem;
+    /* KEY FIX: label now bright enough to read */
+    color: #64748B;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 2.2px; white-space: nowrap;
 }
 .mic-label-icon { font-size: 0.85rem; }
 
-/* Audio Input widget override */
+/* Audio Input */
 div[data-testid="stAudioInput"] {
-    background: rgba(8, 12, 28, 0.9) !important;
-    border: 1px solid rgba(99,102,241,0.2) !important;
+    background: rgba(8, 12, 28, 0.92) !important;
+    border: 1px solid rgba(99,102,241,0.22) !important;
     border-radius: 22px !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
-    box-shadow:
-        0 8px 40px rgba(0,0,0,0.5),
-        0 0 0 1px rgba(255,255,255,0.02) inset !important;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.02) inset !important;
+    transition: all 0.35s cubic-bezier(0.16,1,0.3,1) !important;
     overflow: hidden !important;
 }
 div[data-testid="stAudioInput"]:focus-within {
-    border-color: rgba(167,139,250,0.45) !important;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 30px rgba(124,58,237,0.2) !important;
+    border-color: rgba(167,139,250,0.48) !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 32px rgba(124,58,237,0.22) !important;
 }
 div[data-testid="stAudioInput"] > div,
 div[data-testid="stAudioInput"] > div > div,
 div[data-testid="stAudioInput"] > div > div > div {
     background: transparent !important;
     background-color: transparent !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
+    box-shadow: none !important; border-radius: 0 !important;
 }
 
-/* ──────────────────────────────────────
+/* ══════════════════════════════════════
    ACTION BUTTONS
-──────────────────────────────────────── */
-.btn-row { margin-top: 1.2rem; }
-
-/* Default (clear) */
+══════════════════════════════════════ */
 div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
-    background: rgba(239,68,68,0.05) !important;
-    border: 1px solid rgba(239,68,68,0.15) !important;
-    color: #EF4444 !important;
-    border-radius: 16px !important;
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-    padding: 0.75rem 1rem !important;
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    letter-spacing: 0.3px !important;
-    width: 100% !important;
+    background: rgba(239,68,68,0.06) !important;
+    border: 1px solid rgba(239,68,68,0.18) !important;
+    color: #F87171 !important;
+    border-radius: 16px !important; font-size: 0.81rem !important;
+    font-weight: 600 !important; padding: 0.78rem 1rem !important;
+    transition: all 0.25s cubic-bezier(0.16,1,0.3,1) !important;
+    letter-spacing: 0.3px !important; width: 100% !important;
     backdrop-filter: blur(10px) !important;
 }
 div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover {
-    background: rgba(239,68,68,0.1) !important;
-    border-color: rgba(239,68,68,0.3) !important;
+    background: rgba(239,68,68,0.12) !important;
+    border-color: rgba(239,68,68,0.32) !important;
     transform: translateY(-2px) !important;
-    box-shadow: 0 8px 24px rgba(239,68,68,0.15) !important;
+    box-shadow: 0 8px 24px rgba(239,68,68,0.16) !important;
 }
-
-/* Primary (new conversation) */
 div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button[kind="primary"] {
     background: linear-gradient(135deg, #4F46E5, #6D28D9) !important;
     border: 1px solid rgba(99,102,241,0.4) !important;
@@ -880,40 +635,28 @@ div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button[kind="pr
 div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button[kind="primary"]:hover {
     background: linear-gradient(135deg, #4338CA, #5B21B6) !important;
     transform: translateY(-2px) !important;
-    box-shadow: 0 8px 28px rgba(79,70,229,0.4) !important;
+    box-shadow: 0 8px 28px rgba(79,70,229,0.42) !important;
 }
-
-/* Download */
 div[data-testid="stHorizontalBlock"] div[data-testid="stDownloadButton"] button {
-    background: rgba(16,185,129,0.05) !important;
-    border: 1px solid rgba(16,185,129,0.18) !important;
-    color: #34D399 !important;
-    border-radius: 16px !important;
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-    padding: 0.75rem 1rem !important;
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    letter-spacing: 0.3px !important;
-    width: 100% !important;
-    backdrop-filter: blur(10px) !important;
+    background: rgba(16,185,129,0.06) !important;
+    border: 1px solid rgba(16,185,129,0.2) !important;
+    color: #6EE7B7 !important;
+    border-radius: 16px !important; font-size: 0.81rem !important;
+    font-weight: 600 !important; padding: 0.78rem 1rem !important;
+    transition: all 0.25s cubic-bezier(0.16,1,0.3,1) !important;
+    width: 100% !important; backdrop-filter: blur(10px) !important;
 }
 div[data-testid="stHorizontalBlock"] div[data-testid="stDownloadButton"] button:hover {
-    background: rgba(16,185,129,0.10) !important;
-    border-color: rgba(16,185,129,0.35) !important;
+    background: rgba(16,185,129,0.12) !important;
+    border-color: rgba(16,185,129,0.36) !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 8px 24px rgba(16,185,129,0.15) !important;
 }
 
-/* ──────────────────────────────────────
-   SPINNER
-──────────────────────────────────────── */
-[data-testid="stSpinner"] {
-    color: #A78BFA !important;
-}
+/* Spinner */
+[data-testid="stSpinner"] { color: #A78BFA !important; }
 
-/* ──────────────────────────────────────
-   SCROLLBAR GLOBAL
-──────────────────────────────────────── */
+/* Global scrollbar */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 999px; }
@@ -923,7 +666,7 @@ div[data-testid="stHorizontalBlock"] div[data-testid="stDownloadButton"] button:
 # ============================================
 # 🏠 HEADER
 # ============================================
-total_msgs = len(st.session_state.conversation)
+total_msgs  = len(st.session_state.conversation)
 total_saved = len(st.session_state.all_conversations)
 
 st.markdown(f"""
@@ -935,16 +678,9 @@ st.markdown(f"""
     <div class="vv-title">VoiceVerse Pro</div>
     <div class="vv-subtitle">Conversational Voice Intelligence</div>
     <div class="vv-badge-row">
-        <span class="vv-badge">
-            <span class="vv-badge-dot"></span>
-            AI Online
-        </span>
-        <span class="vv-badge vv-badge-ai">
-            ⚡ Real-time
-        </span>
-        <span class="vv-badge vv-badge-voice">
-            🎵 Voice Ready
-        </span>
+        <span class="vv-badge"><span class="vv-badge-dot"></span>AI Online</span>
+        <span class="vv-badge vv-badge-pink">⚡ Real-time</span>
+        <span class="vv-badge vv-badge-green">🎵 Voice Ready</span>
     </div>
     <div class="stats-strip">
         <div class="stat-chip">
@@ -964,10 +700,10 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ============================================
-# 💬 CHAT WINDOW BUILDER
+# 💬 CHAT WINDOW
 # ============================================
-def build_chat_html(conversation, current_user, current_ai):
-    if not conversation and not current_user:
+def build_chat_html(conversation):
+    if not conversation:
         return """
         <div class="chat-window">
             <div class="chat-titlebar">
@@ -978,16 +714,15 @@ def build_chat_html(conversation, current_user, current_ai):
                 </div>
                 <div class="chat-titlebar-title">VoiceVerse Chat</div>
                 <div class="chat-titlebar-indicator">
-                    <div class="indicator-dot"></div>
-                    Live
+                    <div class="indicator-dot"></div>Live
                 </div>
             </div>
             <div class="chat-fade-top"></div>
             <div class="chat-messages">
                 <div class="empty-state">
                     <div class="empty-icon-ring">🎙️</div>
-                    <div class="empty-title">Start a conversation</div>
-                    <div class="empty-hint">Tap the mic below and speak — I'll respond instantly</div>
+                    <div class="empty-title">Start your conversation</div>
+                    <div class="empty-hint">Tap the mic below and speak —<br>I'll respond instantly in your language</div>
                 </div>
             </div>
             <div class="chat-fade-bottom"></div>
@@ -1026,8 +761,7 @@ def build_chat_html(conversation, current_user, current_ai):
             </div>
             <div class="chat-titlebar-title">VoiceVerse Chat</div>
             <div class="chat-titlebar-indicator">
-                <div class="indicator-dot"></div>
-                Live
+                <div class="indicator-dot"></div>Live
             </div>
         </div>
         <div class="chat-fade-top"></div>
@@ -1038,23 +772,19 @@ def build_chat_html(conversation, current_user, current_ai):
     </div>
     <script>
         (function() {{
-            var box = document.getElementById('chat-scroll');
-            if (box) box.scrollTop = box.scrollHeight;
+            var b = document.getElementById('chat-scroll');
+            if (b) b.scrollTop = b.scrollHeight;
         }})();
         setTimeout(function() {{
-            var box = document.getElementById('chat-scroll');
-            if (box) box.scrollTop = box.scrollHeight;
+            var b = document.getElementById('chat-scroll');
+            if (b) b.scrollTop = b.scrollHeight;
         }}, 150);
     </script>"""
 
-st.markdown(build_chat_html(
-    st.session_state.conversation,
-    st.session_state.current_user_text,
-    st.session_state.current_ai_text
-), unsafe_allow_html=True)
+st.markdown(build_chat_html(st.session_state.conversation), unsafe_allow_html=True)
 
 # ============================================
-# 🎤 MIC INPUT
+# 🎤 MIC SECTION
 # ============================================
 st.markdown("""
 <div class="mic-section">
@@ -1074,10 +804,8 @@ audio_input = st.audio_input("Voice Input", key="voice_stream_bridge", label_vis
 # ============================================
 if audio_input is not None:
     audio_bytes = audio_input.getvalue()
-
     if st.session_state.last_processed_audio != audio_bytes:
         st.session_state.last_processed_audio = audio_bytes
-
         typing_placeholder = st.empty()
 
         with st.spinner("✦ Transcribing your voice..."):
@@ -1087,7 +815,7 @@ if audio_input is not None:
                 def update_typing(status):
                     if status == "typing":
                         typing_placeholder.markdown("""
-                        <div class="ai-wrap" style="padding: 0 0 0.5rem;">
+                        <div class="ai-wrap" style="padding:0 0 0.5rem;">
                             <div class="ai-tag">
                                 <div class="ai-avatar">✦</div>
                                 VoiceVerse AI
@@ -1097,8 +825,7 @@ if audio_input is not None:
                                 <div class="typing-dot"></div>
                                 <div class="typing-dot"></div>
                             </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        </div>""", unsafe_allow_html=True)
                     else:
                         typing_placeholder.empty()
 
@@ -1108,14 +835,13 @@ if audio_input is not None:
 
                 st.session_state.chat_messages.append({"role": "user", "content": user_text})
                 st.session_state.chat_messages.append({"role": "assistant", "content": ai_response})
-
                 st.session_state.current_user_text = user_text
-                st.session_state.current_ai_text = ai_response
+                st.session_state.current_ai_text   = ai_response
 
                 entry = {
                     "timestamp": datetime.now().strftime("%I:%M %p"),
                     "user": user_text,
-                    "ai": ai_response
+                    "ai":   ai_response
                 }
                 st.session_state.conversation.append(entry)
                 save_history(st.session_state.conversation)
@@ -1132,53 +858,50 @@ if audio_input is not None:
 # 📥 ACTION BUTTONS
 # ============================================
 if st.session_state.conversation:
-    st.markdown('<div class="btn-row">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1, 1])
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,1,1])
     with col1:
         if st.button("🗑️ Clear", use_container_width=True):
-            st.session_state.conversation = []
-            st.session_state.chat_messages = []
-            st.session_state.current_user_text = ""
-            st.session_state.current_ai_text = ""
+            st.session_state.conversation       = []
+            st.session_state.chat_messages      = []
+            st.session_state.current_user_text  = ""
+            st.session_state.current_ai_text    = ""
             st.session_state.last_processed_audio = None
-            st.session_state.pending_audio_bytes = None
+            st.session_state.pending_audio_bytes  = None
             save_history([])
             st.rerun()
-
     with col2:
         if st.button("✨ New Chat", use_container_width=True, type="primary"):
             if st.session_state.conversation:
                 st.session_state.all_conversations.append({
-                    "timestamp": datetime.now().strftime("%I:%M %p, %d %b"),
+                    "timestamp":    datetime.now().strftime("%I:%M %p, %d %b"),
                     "conversation": st.session_state.conversation.copy(),
-                    "messages": st.session_state.chat_messages.copy()
+                    "messages":     st.session_state.chat_messages.copy()
                 })
                 save_saved_conversations(st.session_state.all_conversations)
-                st.session_state.conversation = []
-                st.session_state.chat_messages = []
-                st.session_state.current_user_text = ""
-                st.session_state.current_ai_text = ""
+                st.session_state.conversation       = []
+                st.session_state.chat_messages      = []
+                st.session_state.current_user_text  = ""
+                st.session_state.current_ai_text    = ""
                 st.session_state.last_processed_audio = None
-                st.session_state.pending_audio_bytes = None
+                st.session_state.pending_audio_bytes  = None
                 save_history([])
                 st.rerun()
-
     with col3:
         if st.session_state.all_conversations or st.session_state.conversation:
             all_text = []
             if st.session_state.conversation:
                 all_text.append("=== Current Conversation ===")
-                for entry in st.session_state.conversation:
-                    all_text.append(f"{entry.get('timestamp', '')} - You: {entry.get('user', '')}")
-                    all_text.append(f"{entry.get('timestamp', '')} - AI: {entry.get('ai', '')}")
+                for e in st.session_state.conversation:
+                    all_text.append(f"{e.get('timestamp','')} - You: {e.get('user','')}")
+                    all_text.append(f"{e.get('timestamp','')} - AI: {e.get('ai','')}")
                     all_text.append("")
-            if st.session_state.all_conversations:
-                for idx, conv in enumerate(st.session_state.all_conversations):
-                    all_text.append(f"\n=== Conversation {idx+1} ({conv.get('timestamp', '')}) ===")
-                    for entry in conv.get("conversation", []):
-                        all_text.append(f"{entry.get('timestamp', '')} - You: {entry.get('user', '')}")
-                        all_text.append(f"{entry.get('timestamp', '')} - AI: {entry.get('ai', '')}")
-                        all_text.append("")
+            for idx, conv in enumerate(st.session_state.all_conversations):
+                all_text.append(f"\n=== Conversation {idx+1} ({conv.get('timestamp','')}) ===")
+                for e in conv.get("conversation", []):
+                    all_text.append(f"{e.get('timestamp','')} - You: {e.get('user','')}")
+                    all_text.append(f"{e.get('timestamp','')} - AI: {e.get('ai','')}")
+                    all_text.append("")
             st.download_button(
                 label="📥 Export",
                 data="\n".join(all_text),
@@ -1186,64 +909,51 @@ if st.session_state.conversation:
                 mime="text/plain",
                 use_container_width=True
             )
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================
-# 🎯 SIDEBAR - PREMIUM REDESIGN
+# 🎯 SIDEBAR — v2
+# FIX: proper padding, readable text, no "Powered By"
 # ============================================
 with st.sidebar:
 
-    # Brand mark
+    # ── Brand ──────────────────────────────
     st.markdown("""
-    <div style="padding: 1.8rem 1.4rem 1.2rem; border-bottom: 1px solid rgba(99,102,241,0.1);">
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+    <div style="padding:1.8rem 1.6rem 1.4rem;">
+        <div style="display:flex;align-items:center;gap:13px;">
             <div style="
-                width:38px; height:38px; border-radius:12px;
-                background: linear-gradient(135deg, #4F46E5, #7C3AED);
-                display:flex; align-items:center; justify-content:center;
-                font-size:1.1rem;
-                box-shadow: 0 4px 16px rgba(79,70,229,0.4);
+                width:42px;height:42px;border-radius:14px;flex-shrink:0;
+                background:linear-gradient(135deg,#4F46E5,#7C3AED);
+                display:flex;align-items:center;justify-content:center;
+                font-size:1.2rem;
+                box-shadow:0 4px 18px rgba(79,70,229,0.45);
             ">🎙️</div>
             <div>
-                <div style="font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:700; color:#E2E8F0; letter-spacing:-0.3px;">VoiceVerse</div>
-                <div style="font-size:0.65rem; color:#334155; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Pro Edition</div>
+                <div style="font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;color:#E2E8F0;letter-spacing:-0.2px;line-height:1.2;">VoiceVerse</div>
+                <div style="font-size:0.62rem;color:#4B5563;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;margin-top:2px;">Pro Edition</div>
             </div>
         </div>
     </div>
+    <div style="height:1px;background:rgba(99,102,241,0.1);margin:0 1.6rem;"></div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
-    # Language section
+    # ── Language ───────────────────────────
     st.markdown("""
-    <div style="padding: 1.2rem 1.4rem 0.6rem;">
-        <div style="
-            font-size:0.65rem; font-weight:700; color:#334155;
-            text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px;
-            display:flex; align-items:center; gap:8px;
-        ">
-            <span style="color:#818CF8;">🌐</span> Language
+    <div style="padding:1.3rem 1.6rem 0.5rem;">
+        <div style="font-size:0.63rem;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:1.8px;display:flex;align-items:center;gap:7px;margin-bottom:10px;">
+            <span style="color:#818CF8;font-size:0.85rem;">🌐</span> Language
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    lang_options = ["auto", "en", "gu", "hi", "ar", "bn", "pt", "es", "fr", "de", "ja"]
-    lang_labels = {
-        "auto": "🤖 Auto-detect",
-        "en": "🇬🇧 English",
-        "gu": "🇮🇳 Gujarati",
-        "hi": "🇮🇳 Hindi",
-        "ar": "🇸🇦 Arabic",
-        "bn": "🇧🇩 Bengali",
-        "pt": "🇵🇹 Portuguese",
-        "es": "🇪🇸 Spanish",
-        "fr": "🇫🇷 French",
-        "de": "🇩🇪 German",
-        "ja": "🇯🇵 Japanese"
+    lang_options = ["auto","en","gu","hi","ar","bn","pt","es","fr","de","ja"]
+    lang_labels  = {
+        "auto":"🤖 Auto-detect","en":"🇬🇧 English","gu":"🇮🇳 Gujarati",
+        "hi":"🇮🇳 Hindi","ar":"🇸🇦 Arabic","bn":"🇧🇩 Bengali",
+        "pt":"🇵🇹 Portuguese","es":"🇪🇸 Spanish","fr":"🇫🇷 French",
+        "de":"🇩🇪 German","ja":"🇯🇵 Japanese"
     }
-
     selected_lang = st.selectbox(
-        "Output Language",
+        "lang",
         options=lang_options,
         format_func=lambda x: lang_labels.get(x, x),
         index=lang_options.index(st.session_state.selected_language),
@@ -1252,137 +962,77 @@ with st.sidebar:
     if selected_lang != st.session_state.selected_language:
         if st.session_state.conversation:
             st.session_state.all_conversations.append({
-                "timestamp": datetime.now().strftime("%I:%M %p, %d %b"),
+                "timestamp":    datetime.now().strftime("%I:%M %p, %d %b"),
                 "conversation": st.session_state.conversation.copy(),
-                "messages": st.session_state.chat_messages.copy()
+                "messages":     st.session_state.chat_messages.copy()
             })
             save_saved_conversations(st.session_state.all_conversations)
-        st.session_state.selected_language = selected_lang
-        st.session_state.conversation = []
-        st.session_state.chat_messages = []
-        st.session_state.current_user_text = ""
-        st.session_state.current_ai_text = ""
+        st.session_state.selected_language    = selected_lang
+        st.session_state.conversation         = []
+        st.session_state.chat_messages        = []
+        st.session_state.current_user_text    = ""
+        st.session_state.current_ai_text      = ""
         st.session_state.last_processed_audio = None
-        st.session_state.pending_audio_bytes = None
+        st.session_state.pending_audio_bytes  = None
         save_history([])
         st.rerun()
 
-    # Stats section
-    st.markdown("""<div style="height:8px;"></div>""", unsafe_allow_html=True)
-    st.markdown("""
-    <div style="padding: 0 1.4rem;">
-        <div style="border-top: 1px solid rgba(99,102,241,0.1); padding-top: 1.1rem; margin-bottom: 0.8rem;">
-            <div style="
-                font-size:0.65rem; font-weight:700; color:#334155;
-                text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px;
-                display:flex; align-items:center; gap:8px;
-            ">
-                <span style="color:#818CF8;">📊</span> Stats
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    total_msgs_sb = len(st.session_state.conversation)
-    total_saved_sb = len(st.session_state.all_conversations)
-
+    # ── Stats ──────────────────────────────
+    msgs_sb  = len(st.session_state.conversation)
+    saved_sb = len(st.session_state.all_conversations)
     st.markdown(f"""
-    <div style="padding: 0 1.4rem 1rem;">
-        <div style="
-            display:grid; grid-template-columns:1fr 1fr; gap:8px;
-        ">
-            <div style="
-                background: rgba(79,70,229,0.08);
-                border: 1px solid rgba(79,70,229,0.15);
-                border-radius:12px; padding:10px 12px; text-align:center;
-            ">
-                <div style="font-family:'Space Grotesk',sans-serif; font-size:1.5rem; font-weight:700; color:#818CF8;">{total_msgs_sb}</div>
-                <div style="font-size:0.62rem; color:#334155; text-transform:uppercase; letter-spacing:0.6px; font-weight:600;">Messages</div>
+    <div style="height:1px;background:rgba(99,102,241,0.1);margin:1.1rem 1.6rem 0;"></div>
+    <div style="padding:1.2rem 1.6rem 0.6rem;">
+        <div style="font-size:0.63rem;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:1.8px;display:flex;align-items:center;gap:7px;margin-bottom:12px;">
+            <span style="color:#818CF8;font-size:0.85rem;">📊</span> Stats
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+            <div style="background:rgba(79,70,229,0.09);border:1px solid rgba(79,70,229,0.17);border-radius:13px;padding:11px 10px;text-align:center;">
+                <div style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;color:#A78BFA;line-height:1;">{msgs_sb}</div>
+                <div style="font-size:0.6rem;color:#64748B;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;margin-top:3px;">Messages</div>
             </div>
-            <div style="
-                background: rgba(16,185,129,0.08);
-                border: 1px solid rgba(16,185,129,0.15);
-                border-radius:12px; padding:10px 12px; text-align:center;
-            ">
-                <div style="font-family:'Space Grotesk',sans-serif; font-size:1.5rem; font-weight:700; color:#34D399;">{total_saved_sb}</div>
-                <div style="font-size:0.62rem; color:#334155; text-transform:uppercase; letter-spacing:0.6px; font-weight:600;">Saved</div>
+            <div style="background:rgba(16,185,129,0.09);border:1px solid rgba(16,185,129,0.17);border-radius:13px;padding:11px 10px;text-align:center;">
+                <div style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:700;color:#34D399;line-height:1;">{saved_sb}</div>
+                <div style="font-size:0.6rem;color:#64748B;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;margin-top:3px;">Saved</div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Saved conversations
+    # ── History ────────────────────────────
     st.markdown("""
-    <div style="padding: 0 1.4rem;">
-        <div style="border-top: 1px solid rgba(99,102,241,0.1); padding-top: 1.1rem; margin-bottom: 0.8rem;">
-            <div style="
-                font-size:0.65rem; font-weight:700; color:#334155;
-                text-transform:uppercase; letter-spacing:1.5px;
-                display:flex; align-items:center; gap:8px;
-            ">
-                <span style="color:#818CF8;">💾</span> History
-            </div>
+    <div style="height:1px;background:rgba(99,102,241,0.1);margin:0.4rem 1.6rem 0;"></div>
+    <div style="padding:1.2rem 1.6rem 0.7rem 1.6rem;">
+        <div style="font-size:0.63rem;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:1.8px;display:flex;align-items:center;gap:7px;margin-bottom:10px;">
+            <span style="color:#818CF8;font-size:0.85rem;">💾</span> History
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     if st.session_state.all_conversations:
         for idx, conv in enumerate(reversed(st.session_state.all_conversations)):
-            real_idx = len(st.session_state.all_conversations) - 1 - idx
-            ts = conv.get("timestamp", "")
+            real_idx  = len(st.session_state.all_conversations) - 1 - idx
+            ts        = conv.get("timestamp", "")
             msg_count = len(conv.get("conversation", []))
-            if st.button(
-                f"💬  {ts}  ·  {msg_count} msgs",
-                key=f"conv_{real_idx}",
-                use_container_width=True
-            ):
+            if st.button(f"💬  {ts}  ·  {msg_count} msgs", key=f"conv_{real_idx}", use_container_width=True):
                 st.session_state.conversation = conv.get("conversation", [])
                 st.session_state.chat_messages = conv.get("messages", [])
                 if st.session_state.conversation:
                     last = st.session_state.conversation[-1]
                     st.session_state.current_user_text = last.get("user", "")
-                    st.session_state.current_ai_text = last.get("ai", "")
+                    st.session_state.current_ai_text   = last.get("ai", "")
                 st.rerun()
     else:
         st.markdown("""
-        <div style="padding: 0 1.4rem;">
+        <div style="padding:0 1.6rem 1rem;">
             <div style="
-                background: rgba(15,20,40,0.5);
-                border: 1px dashed rgba(99,102,241,0.12);
-                border-radius:12px; padding:16px;
-                text-align:center;
+                background:rgba(15,20,40,0.55);
+                border:1px dashed rgba(99,102,241,0.14);
+                border-radius:14px;padding:18px;text-align:center;
             ">
-                <div style="font-size:1.4rem; margin-bottom:6px; opacity:0.3;">💬</div>
-                <div style="font-size:0.75rem; color:#1E293B; font-weight:500;">No saved conversations yet</div>
+                <div style="font-size:1.5rem;margin-bottom:7px;opacity:0.25;">💬</div>
+                <div style="font-size:0.76rem;color:#4B5563;font-weight:500;">No saved conversations yet</div>
+                <div style="font-size:0.68rem;color:#374151;margin-top:4px;">Start talking to save your first chat</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
-
-    # About
-    st.markdown("""
-    <div style="padding: 1rem 1.4rem 1.4rem;">
-        <div style="border-top: 1px solid rgba(99,102,241,0.1); padding-top: 1.1rem;">
-            <div style="
-                font-size:0.65rem; font-weight:700; color:#334155;
-                text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px;
-                display:flex; align-items:center; gap:8px;
-            ">
-                <span style="color:#EC4899;">❤️</span> Powered by
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px;">
-                <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; background:rgba(15,20,40,0.5); border-radius:10px; border:1px solid rgba(99,102,241,0.1);">
-                    <span style="font-size:0.8rem;">🔉</span>
-                    <span style="font-size:0.73rem; color:#475569; font-weight:500;">AssemblyAI</span>
-                </div>
-                <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; background:rgba(15,20,40,0.5); border-radius:10px; border:1px solid rgba(99,102,241,0.1);">
-                    <span style="font-size:0.8rem;">🤖</span>
-                    <span style="font-size:0.73rem; color:#475569; font-weight:500;">Mistral AI</span>
-                </div>
-                <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; background:rgba(15,20,40,0.5); border-radius:10px; border:1px solid rgba(99,102,241,0.1);">
-                    <span style="font-size:0.8rem;">🔊</span>
-                    <span style="font-size:0.73rem; color:#475569; font-weight:500;">gTTS</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
