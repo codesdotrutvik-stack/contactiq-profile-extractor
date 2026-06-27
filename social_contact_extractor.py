@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 import re
 import json
 from datetime import datetime
-import time
+from duckduckgo_search import DDGS
 
 # ── MISTRAL API KEY ────────────────────────────────────────────
 MISTRAL_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
@@ -16,7 +16,6 @@ st.set_page_config(
     layout="centered"
 )
 
-# ── TITLE ──────────────────────────────────────────────────────
 st.markdown("""
 <div style="text-align: center; padding: 1.5rem 0;">
     <h1 style="font-size: 2.8rem; margin: 0; background: linear-gradient(135deg, #0EA5E9, #6366F1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
@@ -82,60 +81,53 @@ def get_github_profile(username):
         return {'status': 'error', 'message': str(e)}
 
 # ════════════════════════════════════════════════════════════════
-# ── COMPANY EXTRACTION ─────────────────────────────────────────
+# ── COMPANY EXTRACTION (DuckDuckGo + Mistral AI) ─────────────
 # ════════════════════════════════════════════════════════════════
 
-def search_company_google(company_name):
-    """Search Google for company info"""
+def search_company_duckduckgo(company_name):
+    """Search company using DuckDuckGo"""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        }
-        url = f"https://www.google.com/search?q={company_name.replace(' ', '+')}+company+contact+phone+email+address"
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return None
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        text = soup.get_text(separator=' ', strip=True)
-        
-        info = {
-            'phone': None,
-            'email': None,
-            'website': None,
-            'address': None,
-            'description': None
-        }
-        
-        # Phone
-        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', text)
-        if phone_match:
-            info['phone'] = phone_match.group(1).strip()
-        
-        # Email
-        email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
-        if email_match:
-            info['email'] = email_match.group(0).strip()
-        
-        # Website
-        website_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
-        if website_match:
-            info['website'] = website_match.group(1).strip()
-        
-        # Address
-        address_match = re.search(r'\d{1,5}\s[\w\s]{2,40}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd)[\w\s,\.]{0,60}', text, re.IGNORECASE)
-        if address_match:
-            info['address'] = address_match.group(0).strip()
-        
-        # Description
-        meta_desc = soup.find('meta', {'name': 'description'})
-        if meta_desc:
-            info['description'] = meta_desc.get('content', '')[:300]
-        
-        return info
-    except:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(f"{company_name} company contact phone email address", max_results=5))
+            
+            info = {
+                'phone': None,
+                'email': None,
+                'website': None,
+                'address': None,
+                'description': None,
+                'body': ''
+            }
+            
+            for result in results:
+                body = result.get('body', '')
+                info['body'] += body + ' '
+                
+                # Phone
+                phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', body)
+                if phone_match and not info['phone']:
+                    info['phone'] = phone_match.group(1).strip()
+                
+                # Email
+                email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', body)
+                if email_match and not info['email']:
+                    info['email'] = email_match.group(0).strip()
+                
+                # Website
+                website_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', body)
+                if website_match and not info['website']:
+                    info['website'] = website_match.group(1).strip()
+                
+                # Address
+                address_match = re.search(r'\d{1,5}\s[\w\s]{2,40}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd)[\w\s,\.]{0,60}', body, re.IGNORECASE)
+                if address_match and not info['address']:
+                    info['address'] = address_match.group(0).strip()
+                
+                if not info['description']:
+                    info['description'] = result.get('title', '') + ' ' + body[:200]
+            
+            return info
+    except Exception as e:
         return None
 
 def call_mistral_company(company_name):
@@ -191,25 +183,18 @@ def get_company_info(company_name):
         'phone': 'Not found',
         'address': 'Not found',
         'description': 'Not found',
-        'source': 'Google Search + Mistral AI'
+        'source': 'DuckDuckGo + Mistral AI'
     }
     
     try:
-        # Step 1: Google Search
-        google_data = search_company_google(company_name)
-        if google_data:
-            for key, value in google_data.items():
-                if value:
-                    if key == 'phone':
-                        result['phone'] = value
-                    elif key == 'email':
-                        result['email'] = value
-                    elif key == 'website':
-                        result['website'] = value
-                    elif key == 'address':
-                        result['address'] = value
-                    elif key == 'description':
-                        result['description'] = value
+        # Step 1: DuckDuckGo Search
+        ddg_data = search_company_duckduckgo(company_name)
+        if ddg_data:
+            for key in ['phone', 'email', 'website', 'address', 'description']:
+                if ddg_data.get(key):
+                    result[key] = ddg_data[key]
+            if ddg_data.get('body'):
+                result['description'] = ddg_data['body'][:300]
         
         # Step 2: Mistral AI
         mistral_data = call_mistral_company(company_name)
@@ -340,6 +325,6 @@ with st.expander("💡 Samples"):
 st.markdown("""
 <div style="text-align: center; color: #999; padding: 2rem 0 0.5rem 0; font-size: 0.8rem; border-top: 1px solid #eee; margin-top: 2rem;">
     ContactIQ · Profile Extractor<br>
-    <span style="font-size: 0.7rem;">GitHub API · Google Search · Mistral AI</span>
+    <span style="font-size: 0.7rem;">GitHub API · DuckDuckGo · Mistral AI</span>
 </div>
 """, unsafe_allow_html=True)
