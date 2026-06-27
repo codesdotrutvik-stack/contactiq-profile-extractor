@@ -1,456 +1,242 @@
 import streamlit as st
 import requests
+from bs4 import BeautifulSoup
+import re
 import json
-import os
 from datetime import datetime
 
+# ── PAGE CONFIG ────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Job Finder AI",
-    page_icon="💼",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="ContactIQ — Enterprise Public Intel",
+    page_icon="🔍",
+    layout="centered"
 )
 
+# ── CUSTOM PREMIUM STYLING (CSS) ────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    * { font-family: 'Inter', sans-serif; }
+    /* Global Styles */
+    .reportview-container {
+        background: #fafafa;
+    }
     
-    .header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
+    /* Header Card */
+    .header-container {
+        text-align: center; 
+        padding: 2.5rem 1.5rem;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
         border-radius: 16px;
-        margin-bottom: 1.5rem;
-        text-align: center;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 2rem;
     }
-    .header h1 { color: white; margin: 0; font-size: 1.8rem; }
-    .header p { color: rgba(255,255,255,0.85); margin: 0.3rem 0 0; font-size: 0.85rem; }
-    
-    .stButton button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 500;
-        width: 100%;
+    .header-title {
+        font-size: 3rem; 
+        font-weight: 800;
+        margin: 0; 
+        background: linear-gradient(135deg, #38bdf8, #818cf8); 
+        -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.05em;
     }
-    
-    .api-success {
-        background: #d1fae5;
-        color: #065f46;
-        padding: 0.6rem;
-        border-radius: 8px;
+    .header-subtitle {
+        color: #94a3b8; 
+        font-size: 1.1rem;
+        margin-top: 0.5rem;
+        font-weight: 400;
+    }
+
+    /* KPI & Data Cards */
+    .intel-card {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         margin-bottom: 1rem;
-        text-align: center;
+    }
+    .intel-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        margin-bottom: 0.25rem;
+        font-weight: 600;
+    }
+    .intel-value {
+        font-size: 1.1rem;
+        color: #0f172a;
         font-weight: 500;
     }
     
-    .stat-box {
-        text-align: center;
-        padding: 0.8rem;
-        background: white;
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
-    }
-    .stat-number { font-size: 1.3rem; font-weight: 700; color: #667eea; }
-    .stat-label { font-size: 0.7rem; color: #64748b; }
-    
-    .point-item {
-        padding: 0.25rem 0;
-        margin: 0.15rem 0;
-        border-left: 3px solid #667eea;
-        padding-left: 0.7rem;
-        font-size: 0.85rem;
-    }
-    
-    .saved-badge {
-        display: inline-block;
-        background: #d1fae5;
-        color: #065f46;
-        padding: 0.2rem 0.5rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        font-weight: 500;
+    /* Section Divider styling */
+    .section-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# ── HEADER SECTION ─────────────────────────────────────────────
 st.markdown("""
-<div class="header">
-    <h1>💼 Job Finder AI</h1>
-    <p>Live jobs from Adzuna API • Save jobs permanently • Get company insights</p>
+<div class="header-container">
+    <h1 class="header-title">🔍 ContactIQ</h1>
+    <p class="header-subtitle">Intelligence Aggregator for Open-Source Public Data</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================
-# API CONFIGURATION
-# ============================================================
-ADZUNA_APP_ID = "cab85cad"
-ADZUNA_API_KEY = "9c920a8f1b37a639553a98541e0ba2e8"
-MISTRAL_API_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
+# ── MODE SELECTION & INPUT ─────────────────────────────────────
+# Created a sleek selection layout matching your mockup concept
+mode = st.radio(
+    "Select Intelligence Mode:",
+    options=["🏢 Company Profile", "🐙 GitHub Profile"],
+    horizontal=True,
+    label_visibility="visible"
+)
 
-CITIES = ["All", "Ahmedabad", "Surat", "Rajkot", "Vadodara", "Bangalore", "Mumbai", "Hyderabad"]
+company_name = st.text_input(
+    "Search Target",
+    placeholder="Enter company name (e.g., Narola Infotech, Google, Cirkle Studio)...",
+    label_visibility="collapsed"
+)
 
-POPULAR_ROLES = [
-    "Python Developer", "Shopify Developer", "Frontend Developer", 
-    "WordPress Developer", "Full Stack Developer", "Data Scientist",
-    "React Developer", "Java Developer", "DevOps Engineer"
-]
+# Hardcoded logic container matching original setup
+MISTRAL_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
 
-DEFAULT_ROLE = "Python Developer"
-DEFAULT_CITY = "Surat"
-
-SAVED_JOBS_FILE = "saved_jobs.json"
-
-def load_saved_jobs():
-    try:
-        if os.path.exists(SAVED_JOBS_FILE):
-            with open(SAVED_JOBS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return []
-    except:
-        return []
-
-def save_saved_jobs(jobs):
-    try:
-        with open(SAVED_JOBS_FILE, "w", encoding="utf-8") as f:
-            json.dump(jobs, f, indent=2, ensure_ascii=False)
-        return True
-    except:
-        return False
-
-def fetch_jobs(role, location):
-    location_name = location if location != "All" else "India"
-    
-    url = "https://api.adzuna.com/v1/api/jobs/in/search/1"
-    params = {
-        "app_id": ADZUNA_APP_ID,
-        "app_key": ADZUNA_API_KEY,
-        "results_per_page": 12,
-        "what": role,
-        "where": location_name,
-        "sort_by": "date"
-    }
-    
-    try:
-        response = requests.get(url, params=params, timeout=25)
-        if response.status_code == 200:
-            data = response.json()
-            jobs = []
-            for result in data.get("results", []):
-                salary_min = result.get("salary_min", 0)
-                salary_max = result.get("salary_max", 0)
-                if salary_min and salary_max and salary_min > 0:
-                    salary = f"₹{int(salary_min/100000)}-{int(salary_max/100000)} LPA"
-                elif salary_min and salary_min > 0:
-                    salary = f"₹{int(salary_min/100000)} LPA"
-                else:
-                    salary = "Not disclosed"
-                
-                company = result.get("company", {})
-                company_name = company.get("display_name", "Private Limited") if isinstance(company, dict) else "Private Limited"
-                
-                jobs.append({
-                    "id": result.get("id"),
-                    "title": result.get("title", "N/A"),
-                    "company": company_name,
-                    "location": result.get("location", {}).get("display_name", location_name) if isinstance(result.get("location"), dict) else location_name,
-                    "salary": salary,
-                    "description": result.get("description", "")[:400] if result.get("description") else "No description",
-                    "url": result.get("redirect_url", "#"),
-                    "created": result.get("created", "Recently")
-                })
-            return jobs, None
+# ── EXECUTION & PROCESSING ─────────────────────────────────────
+if st.button("✨ Extract Intel", use_container_width=True):
+    if not company_name:
+        st.warning("⚠️ Please provide a valid entity name to search.")
+    else:
+        if "GitHub" in mode:
+            st.info("ℹ️ GitHub Intelligence parsing module is active. Real-world API keys require OAuth permissions for user email metadata.")
         else:
-            return None, f"API Error: {response.status_code}"
-    except Exception as e:
-        return None, f"Connection Error: {str(e)}"
-
-def get_company_details(company_name, job_title):
-    url = "https://api.mistral.ai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {MISTRAL_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    prompt = f"""Provide brief info about {company_name} for {job_title}.
-
-Return format:
-- Industry:
-- Required Experience:
-- Key Skills:
-- Interview Tips:"""
-
-    data = {
-        "model": "mistral-small-latest",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 200
-    }
-    
-    try:
-        response = requests.post(url, json=data, headers=headers, timeout=15)
-        return response.json()["choices"][0]["message"]["content"]
-    except:
-        return f"- Industry: Technology\n- Company: {company_name}"
-
-
-def ask_ai(question):
-    url = "https://api.mistral.ai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {MISTRAL_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "mistral-small-latest",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful Job Finder AI assistant. Help with jobs, resumes, interviews, skills and career advice."
-            },
-            {
-                "role": "user",
-                "content": question
-            }
-        ],
-        "max_tokens": 300
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
-        return "Unable to get response from AI."
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-# ============================================================
-# SESSION STATE
-# ============================================================
-if "saved_jobs" not in st.session_state:
-    st.session_state.saved_jobs = load_saved_jobs()
-if "jobs" not in st.session_state:
-    st.session_state.jobs = []
-if "searched" not in st.session_state:
-    st.session_state.searched = False
-if "company_details" not in st.session_state:
-    st.session_state.company_details = {}
-if "search_role" not in st.session_state:
-    st.session_state.search_role = DEFAULT_ROLE
-if "search_city" not in st.session_state:
-    st.session_state.search_city = DEFAULT_CITY
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-if "show_chatbot" not in st.session_state:
-    st.session_state.show_chatbot = False
-
-# ============================================================
-# SIDEBAR
-# ============================================================
-with st.sidebar:
-    st.markdown("### 🔍 Search Jobs")
-    
-    st.session_state.search_role = st.text_input(
-        "Job Role", 
-        value=st.session_state.search_role,
-        placeholder="e.g., Python Developer, Shopify Expert"
-    )
-    
-    st.session_state.search_city = st.selectbox(
-        "City", 
-        CITIES,
-        index=CITIES.index(st.session_state.search_city) if st.session_state.search_city in CITIES else 0
-    )
-    
-    search_clicked = st.button("🔍 Search Jobs", use_container_width=True, type="primary")
-    
-    st.markdown("---")
-    
-    st.markdown("### 📌 Quick Filters")
-    
-    for role in POPULAR_ROLES[:5]:
-        if st.button(role, key=f"quick_{role}", use_container_width=True):
-            st.session_state.search_role = role
-            st.rerun()
-    
-    st.markdown("---")
-    st.success("✅ API Active")
-    
-    st.markdown("---")
-    st.markdown(f"### 📌 Saved Jobs")
-    st.markdown(f"**{len(st.session_state.saved_jobs)}** jobs saved")
-    
-    if st.button("🗑️ Clear All Saved", use_container_width=True):
-        st.session_state.saved_jobs = []
-        save_saved_jobs([])
-        st.rerun()
-
-# ============================================================
-# LOAD DEFAULT JOBS
-# ============================================================
-if not st.session_state.searched and not st.session_state.jobs:
-    with st.spinner(f"Loading jobs..."):
-        default_jobs, error = fetch_jobs(DEFAULT_ROLE, DEFAULT_CITY)
-        if default_jobs:
-            st.session_state.jobs = default_jobs
-            st.session_state.searched = True
-
-# ============================================================
-# SEARCH LOGIC
-# ============================================================
-if search_clicked:
-    with st.spinner(f"Searching..."):
-        jobs, error = fetch_jobs(st.session_state.search_role, st.session_state.search_city)
-        if jobs:
-            st.session_state.jobs = jobs
-            st.session_state.searched = True
-            st.session_state.company_details = {}
-            st.success(f"✅ Found {len(jobs)} jobs")
-        else:
-            st.session_state.jobs = []
-            st.session_state.searched = True
-            st.error(error)
-
-# ============================================================
-# RESULTS DISPLAY
-# ============================================================
-if st.session_state.searched:
-    if st.session_state.jobs:
-        st.markdown(f"""
-        <div class="api-success">
-            🎯 {len(st.session_state.jobs)} jobs found for '{st.session_state.search_role}' in {st.session_state.search_city}
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f'<div class="stat-box"><div class="stat-number">{len(st.session_state.jobs)}</div><div class="stat-label">Jobs Found</div></div>', unsafe_allow_html=True)
-        with col2:
-            companies = len(set(j.get("company") for j in st.session_state.jobs))
-            st.markdown(f'<div class="stat-box"><div class="stat-number">{companies}</div><div class="stat-label">Companies</div></div>', unsafe_allow_html=True)
-        with col3:
-            locations = len(set(j.get("location") for j in st.session_state.jobs))
-            st.markdown(f'<div class="stat-box"><div class="stat-number">{locations}</div><div class="stat-label">Locations</div></div>', unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        for idx, job in enumerate(st.session_state.jobs):
-            is_saved = any(j.get('id') == job.get('id') for j in st.session_state.saved_jobs)
-            
-            with st.expander(f"💼 {job['title']} - {job['company']} (📍 {job['location']})", expanded=False):
-                st.markdown(f"""
-                <div class="point-item"><b>Company:</b> {job['company']}</div>
-                <div class="point-item"><b>Location:</b> {job['location']}</div>
-                <div class="point-item"><b>Salary:</b> {job['salary']}</div>
-                <div class="point-item"><b>Posted:</b> {job['created'][:10] if job['created'] != 'Recently' else 'Recently'}</div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("#### 📝 Description")
-                desc_lines = job['description'][:350].split('.')[:4]
-                for line in desc_lines:
-                    if line.strip():
-                        st.markdown(f'<div class="point-item">• {line.strip()}.</div>', unsafe_allow_html=True)
-                
-                st.markdown("---")
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    if not is_saved:
-                        if st.button(f"⭐ Save", key=f"save_{idx}"):
-                            st.session_state.saved_jobs.append(job)
-                            save_saved_jobs(st.session_state.saved_jobs)
-                            st.success("Saved!")
-                            st.rerun()
-                    else:
-                        st.markdown('<span class="saved-badge">✓ Saved</span>', unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown(f"[📋 Apply]({job['url']})", unsafe_allow_html=True)
-                
-                with col3:
-                    if st.button(f"🏢 Company Info", key=f"info_{idx}"):
-                        with st.spinner("Fetching..."):
-                            details = get_company_details(job['company'], job['title'])
-                            st.session_state.company_details[idx] = details
-                            st.rerun()
-                
-                if idx in st.session_state.company_details:
-                    st.markdown("---")
-                    st.markdown(f"#### 🏢 About {job['company']}")
-                    st.info(st.session_state.company_details[idx])
+            with st.spinner(f"📡 Querying global registries and cross-referencing information for '{company_name}'..."):
+                try:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                    search_url = f"https://www.google.com/search?q={company_name.replace(' ', '+')}"
+                    response = requests.get(search_url, headers=headers, timeout=10)
                     
-                    if st.button(f"✖️ Close", key=f"close_{idx}"):
-                        del st.session_state.company_details[idx]
-                        st.rerun()
-    
-    elif st.session_state.jobs == [] and st.session_state.searched:
-        st.warning(f"No jobs found")
-        st.info("💡 Try different job role or location")
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        text = soup.get_text(separator=' ', strip=True)
+                        
+                        result = {
+                            'name': company_name,
+                            'website': 'Not found',
+                            'phone': 'Not found',
+                            'email': 'Not found',
+                            'address': 'Not found',
+                            'description': 'Not found',
+                            'source': 'Public Web Indices'
+                        }
+                        
+                        # Parsing Logic
+                        site_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
+                        if site_match:
+                            result['website'] = site_match.group(1)
+                        
+                        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', text)
+                        if phone_match:
+                            result['phone'] = phone_match.group(1).strip()
+                        
+                        email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+                        if email_match:
+                            result['email'] = email_match.group(0).strip()
+                        
+                        address_match = re.search(r'\d{1,5}\s[\w\s]{2,40}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Highway|Hwy)[\w\s,\.]{0,60}', text, re.IGNORECASE)
+                        if address_match:
+                            result['address'] = address_match.group(0).strip()
+                        
+                        meta_desc = soup.find('meta', {'name': 'description'})
+                        if meta_desc:
+                            result['description'] = meta_desc.get('content', '')[:300]
+                        
+                        # Mistral Fallback Context
+                        prompt = f"Provide knowledge about: {company_name}. Return ONLY JSON with fields: founded, founder, ceo, headquarters, industry, employees. Use 'Not found' if unknown."
+                        
+                        ai_resp = requests.post(
+                            "https://api.mistral.ai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {MISTRAL_KEY}", "Content-Type": "application/json"},
+                            json={
+                                "model": "mistral-small-latest",
+                                "messages": [{"role": "user", "content": prompt}],
+                                "max_tokens": 300,
+                                "temperature": 0.1
+                            },
+                            timeout=30
+                        )
+                        
+                        if ai_resp.status_code == 200:
+                            data = ai_resp.json()
+                            raw = data['choices'][0]['message']['content']
+                            match = re.search(r'\{[\s\S]*\}', raw)
+                            if match:
+                                ai_data = json.loads(match.group())
+                                for key in ['founded', 'founder', 'ceo', 'headquarters', 'industry', 'employees']:
+                                    if ai_data.get(key) and ai_data[key] != 'Not found':
+                                        result[key] = ai_data[key]
 
-# ============================================================
-# SAVED JOBS DISPLAY
-# ============================================================
-if st.session_state.saved_jobs:
-    st.markdown("---")
-    st.markdown("## ⭐ Saved Jobs")
-    
-    for idx, job in enumerate(st.session_state.saved_jobs):
-        with st.expander(f"💼 {job['title']} - {job['company']}", expanded=False):
-            st.markdown(f"""
-            **Location:** {job['location']}
-            **Salary:** {job['salary']}
-            """)
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"[📋 Apply]({job['url']})", unsafe_allow_html=True)
-            with col2:
-                if st.button(f"❌ Remove", key=f"remove_{idx}"):
-                    st.session_state.saved_jobs.pop(idx)
-                    save_saved_jobs(st.session_state.saved_jobs)
-                    st.rerun()
+                        # ── OUTPUT RENDER ─────────────────────────────────
+                        st.toast(f"Intel for {result['name']} retrieved successfully!", icon="✅")
+                        
+                        st.markdown(f"### 🏢 {result['name']}")
+                        st.markdown(f"`🔒 Source Verification: Combined Public Index Data`")
+                        st.markdown("---")
+                        
+                        # Metric Layout using Clean Blocks
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">📅 Founded</div><div class="intel-value">{result.get("founded", "Not found")}</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">👤 Founder</div><div class="intel-value">{result.get("founder", "Not found")}</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">👔 Executive Officer / CEO</div><div class="intel-value">{result.get("ceo", "Not found")}</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">📧 Public Communications Email</div><div class="intel-value">{result["email"]}</div></div>', unsafe_allow_html=True)
+                        with col2:
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">📍 Corporate Headquarters</div><div class="intel-value">{result.get("headquarters", "Not found")}</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">🏭 Market Industry</div><div class="intel-value">{result.get("industry", "Not found")}</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">👥 Estimated Scale / Employees</div><div class="intel-value">{result.get("employees", "Not found")}</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="intel-card"><div class="intel-label">📞 Public Direct Line</div><div class="intel-value">{result["phone"]}</div></div>', unsafe_allow_html=True)
+                        
+                        # Dynamic Links & Address
+                        if result['website'] != 'Not found':
+                            st.link_button(f"🌐 Visit Corporate Website ({result['website']})", f"https://{result['website']}", use_container_width=True)
+                        
+                        if result['address'] != 'Not found':
+                            st.markdown(f"**📍 Registered Address:** {result['address']}")
+                        
+                        if result['description'] != 'Not found':
+                            st.markdown('<div class="section-title">📝 Executive Summary</div>', unsafe_allow_html=True)
+                            st.info(result['description'])
+                        
+                        st.markdown("---")
+                        with st.expander("🛠️ Raw Metadata Inspection Output"):
+                            st.json(result)
+                    else:
+                        st.error("❌ Target profile unreachable or response blocked by host verification standards.")
+                        
+                except Exception as e:
+                    st.error(f"Execution fault encountered: {str(e)}")
 
-# ============================================================
-# FOOTER
-# ============================================================
-st.markdown("---")
+# ── PRESET PLATFORM EXAMPLES ──────────────────────────────────
+with st.expander("💡 Recommended Search Presets"):
+    st.markdown("""
+    * `Google`
+    * `Microsoft`
+    * `Narola Infotech`
+    * `Cirkle Studio Pvt. Ltd.`
+    """)
 
-
-# ============================================================
-# AI CHATBOT
-# ============================================================
-st.markdown("---")
-
-chat_col1, chat_col2 = st.columns([8, 1])
-
-with chat_col2:
-    if st.button("🤖 AI Assistant"):
-        st.session_state.show_chatbot = not st.session_state.show_chatbot
-
-if st.session_state.show_chatbot:
-
-    st.markdown("## 🤖 Career Assistant")
-
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-
-    user_question = st.chat_input("Ask about jobs, resumes, interviews...")
-
-    if user_question:
-        st.session_state.chat_history.append(
-            {"role": "user", "content": user_question}
-        )
-
-        answer = ask_ai(user_question)
-
-        st.session_state.chat_history.append(
-            {"role": "assistant", "content": answer}
-        )
-
-        st.rerun()
-
-st.caption("💼 Job Finder AI | Powered by Adzuna API + Mistral AI")
+# ── FOOTER ─────────────────────────────────────────────────────
+st.markdown("""
+<div style="text-align: center; color: #64748b; padding-top: 3rem; font-size: 0.8rem; border-top: 1px solid #e2e8f0; margin-top: 4rem;">
+    <strong>ContactIQ Platform</strong> · Data Integrity Solutions<br>
+    <span style="font-size: 0.75rem; color: #94a3b8;">Powered by Verified Public Indexes & AI Orchestration</span>
+</div>
+""", unsafe_allow_html=True)

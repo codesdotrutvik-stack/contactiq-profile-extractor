@@ -367,7 +367,7 @@ st.markdown("""
 .chat-messages { height: 430px; overflow-y: auto; overflow-x: hidden; padding: 1.6rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.2) transparent; }
 .chat-messages::-webkit-scrollbar { width: 3px; }
 .chat-messages::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 999px; }
-.chat-fade-top    { position: absolute; top: 53px; left: 0; right: 0; height: 48px; background: linear-gradient(to bottom, rgba(8,12,28,0.92), transparent); pointer-events: none; z-index: 2; }
+.chat-fade-top    { position: absolute; top: 53px; left: 0; right: 0; height: 46px; background: linear-gradient(to bottom, rgba(8,12,28,0.92), transparent); pointer-events: none; z-index: 2; }
 .chat-fade-bottom { position: absolute; bottom: 0; left: 0; right: 0; height: 48px; background: linear-gradient(to top, rgba(8,12,28,0.92), transparent); pointer-events: none; z-index: 2; }
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; padding: 2rem; }
 .empty-icon-ring { width: 80px; height: 80px; border-radius: 50%; border: 1px solid rgba(99,102,241,0.22); display: flex; align-items: center; justify-content: center; font-size: 2rem; background: rgba(79,70,229,0.07); animation: empty-float 3.5s ease-in-out infinite; box-shadow: 0 0 30px rgba(79,70,229,0.12); }
