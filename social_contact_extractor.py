@@ -1,181 +1,75 @@
-import streamlit as st
-import requests
-from bs4 import BeautifulSoup
 import re
-import json
-from datetime import datetime
-import time
+from urllib.parse import urlparse, urljoin
 
-# ── MISTRAL API KEY ────────────────────────────────────────────
-MISTRAL_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
-
-# ── PAGE CONFIG ────────────────────────────────────────────────
-st.set_page_config(
-    page_title="ContactIQ — Profile Extractor",
-    page_icon="🔍",
-    layout="centered"
-)
-
-# ── TITLE ──────────────────────────────────────────────────────
-st.markdown("""
-<div style="text-align: center; padding: 1.5rem 0;">
-    <h1 style="font-size: 2.8rem; margin: 0; background: linear-gradient(135deg, #0EA5E9, #6366F1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-        🔍 ContactIQ
-    </h1>
-    <p style="color: #666; font-size: 1.1rem;">Extract public data from GitHub or Company profiles</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ── MODE TOGGLE ─────────────────────────────────────────────────
-mode = st.radio(
-    "Select Mode:",
-    ["🐙 GitHub Profile", "🏢 Company Profile"],
-    horizontal=True,
-    index=0
-)
-
-st.markdown("---")
-
-# ── INPUT ──────────────────────────────────────────────────────
-if mode == "🐙 GitHub Profile":
-    username = st.text_input("GitHub Username", placeholder="octocat", label_visibility="collapsed")
-else:
-    company_name = st.text_input("Company Name", placeholder="Vasundhara Infotech LLP", label_visibility="collapsed")
-
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    extract_btn = st.button("🔍 Extract Data", use_container_width=True)
-
-# ════════════════════════════════════════════════════════════════
-# ── GITHUB EXTRACTION ──────────────────────────────────────────
-# ════════════════════════════════════════════════════════════════
-
-def get_github_profile(username):
+def find_official_website(company_name):
+    """Better website discovery"""
     try:
-        url = f"https://api.github.com/users/{username}"
-        headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'ContactIQ'}
-        response = requests.get(url, headers=headers, timeout=10)
+        query = f"{company_name} official website OR 'contact us' OR 'about us'"
+        url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
         
-        if response.status_code == 200:
-            data = response.json()
-            return {
-                'status': 'success',
-                'name': data.get('name') or data.get('login', 'Not found'),
-                'username': data.get('login', 'Not found'),
-                'email': data.get('email') or 'Not public',
-                'location': data.get('location') or 'Not found',
-                'company': data.get('company') or 'Not found',
-                'bio': data.get('bio') or 'Not found',
-                'blog': data.get('blog') or 'Not found',
-                'twitter': data.get('twitter_username') or 'Not found',
-                'public_repos': data.get('public_repos', 0),
-                'followers': data.get('followers', 0),
-                'following': data.get('following', 0),
-                'profile_url': data.get('html_url', ''),
-                'avatar_url': data.get('avatar_url', '')
-            }
-        elif response.status_code == 404:
-            return {'status': 'error', 'message': f"User '{username}' not found"}
-        else:
-            return {'status': 'error', 'message': f"HTTP {response.status_code}"}
-    except Exception as e:
-        return {'status': 'error', 'message': str(e)}
-
-# ════════════════════════════════════════════════════════════════
-# ── COMPANY EXTRACTION ─────────────────────────────────────────
-# ════════════════════════════════════════════════════════════════
-
-def search_company_google(company_name):
-    """Search Google for company info"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        }
-        url = f"https://www.google.com/search?q={company_name.replace(' ', '+')}+company+contact+phone+email+address"
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return None
-        
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        response = requests.get(url, headers=headers, timeout=12)
         soup = BeautifulSoup(response.text, 'html.parser')
-        text = soup.get_text(separator=' ', strip=True)
         
-        info = {
-            'phone': None,
-            'email': None,
-            'website': None,
-            'address': None,
-            'description': None
-        }
+        links = soup.find_all('a')
+        for link in links:
+            href = link.get('href', '')
+            if 'url?q=' in href:
+                actual_url = href.split('url?q=')[1].split('&')[0]
+                if company_name.lower().replace(' ', '') in actual_url.lower() or \
+                   any(ext in actual_url for ext in ['.com', '.io', '.in', '.co.in']):
+                    if not any(bad in actual_url for bad in ['facebook', 'linkedin', 'instagram', 'youtube', 'twitter']):
+                        return actual_url
+        return None
+    except:
+        return None
+
+
+def scrape_contact_page(website_url):
+    """Direct company website + contact page scraping"""
+    try:
+        # Main page
+        response = requests.get(website_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Phone
-        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', text)
-        if phone_match:
-            info['phone'] = phone_match.group(1).strip()
+        text = soup.get_text(separator=' ')
         
-        # Email
-        email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
-        if email_match:
-            info['email'] = email_match.group(0).strip()
+        info = {'phone': None, 'email': None, 'address': None}
         
-        # Website
-        website_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
-        if website_match:
-            info['website'] = website_match.group(1).strip()
+        # Improved Phone Regex (Indian numbers bhi support)
+        phone_patterns = [
+            r'(\+91[-\s]?)?[6-9]\d{9}',
+            r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})'
+        ]
+        for pattern in phone_patterns:
+            match = re.search(pattern, text)
+            if match:
+                info['phone'] = match.group(0).strip()
+                break
         
-        # Address
-        address_match = re.search(r'\d{1,5}\s[\w\s]{2,40}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd)[\w\s,\.]{0,60}', text, re.IGNORECASE)
+        # Better Email
+        emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+        if emails:
+            # Prefer info@, contact@, hello@ etc.
+            priority = ['info@', 'contact@', 'hello@', 'admin@', 'hr@']
+            for p in priority:
+                for e in emails:
+                    if p in e.lower():
+                        info['email'] = e
+                        break
+                if info['email']: break
+            if not info['email']:
+                info['email'] = emails[0]
+        
+        # Address (Improved)
+        address_match = re.search(r'(?:Address|Location)[:\s]*(.+?)(?=\d{6}|Contact|Phone|Email|\n|$)', text, re.I)
         if address_match:
-            info['address'] = address_match.group(0).strip()
-        
-        # Description
-        meta_desc = soup.find('meta', {'name': 'description'})
-        if meta_desc:
-            info['description'] = meta_desc.get('content', '')[:300]
+            info['address'] = address_match.group(1).strip()[:150]
         
         return info
     except:
         return None
 
-def call_mistral_company(company_name):
-    """Call Mistral AI for company details"""
-    try:
-        prompt = f"""
-        Provide information about this company: {company_name}
-        
-        Return ONLY JSON:
-        {{
-            "founded": "year or Not found",
-            "founder": "name or Not found",
-            "ceo": "name or Not found",
-            "headquarters": "location or Not found",
-            "industry": "sector or Not found",
-            "employees": "number or Not found"
-        }}
-        """
-        
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {MISTRAL_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": "mistral-small-latest",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 300,
-                "temperature": 0.1
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            raw = data['choices'][0]['message']['content']
-            match = re.search(r'\{[\s\S]*\}', raw)
-            if match:
-                return json.loads(match.group())
-        return None
-    except:
-        return None
 
 def get_company_info(company_name):
     result = {
@@ -191,27 +85,28 @@ def get_company_info(company_name):
         'phone': 'Not found',
         'address': 'Not found',
         'description': 'Not found',
-        'source': 'Google Search + Mistral AI'
+        'source': 'Google + Website Scraping + Mistral'
     }
     
     try:
-        # Step 1: Google Search
+        # 1. Try direct website scraping (Most Important)
+        website = find_official_website(company_name)
+        if website:
+            result['website'] = website.replace('https://', '').replace('http://', '')
+            contact_data = scrape_contact_page(website)
+            if contact_data:
+                if contact_data['phone']: result['phone'] = contact_data['phone']
+                if contact_data['email']: result['email'] = contact_data['email']
+                if contact_data['address']: result['address'] = contact_data['address']
+        
+        # 2. Google Search (backup)
         google_data = search_company_google(company_name)
         if google_data:
-            for key, value in google_data.items():
-                if value:
-                    if key == 'phone':
-                        result['phone'] = value
-                    elif key == 'email':
-                        result['email'] = value
-                    elif key == 'website':
-                        result['website'] = value
-                    elif key == 'address':
-                        result['address'] = value
-                    elif key == 'description':
-                        result['description'] = value
+            for k, v in google_data.items():
+                if v and result[k] == 'Not found':
+                    result[k] = v
         
-        # Step 2: Mistral AI
+        # 3. Mistral (for structured info)
         mistral_data = call_mistral_company(company_name)
         if mistral_data:
             for key in ['founded', 'founder', 'ceo', 'headquarters', 'industry', 'employees']:
@@ -219,127 +114,9 @@ def get_company_info(company_name):
                     result[key] = mistral_data[key]
         
         result['status'] = 'success'
+        
     except Exception as e:
         result['status'] = 'error'
         result['error'] = str(e)
     
     return result
-
-# ════════════════════════════════════════════════════════════════
-# ── PROCESSING ──────────────────────────────────────────────────
-# ════════════════════════════════════════════════════════════════
-
-if extract_btn:
-    if mode == "🐙 GitHub Profile":
-        if not username:
-            st.warning("Please enter a GitHub username.")
-        else:
-            username = username.strip().replace('@', '').split('/')[-1]
-            with st.spinner(f"🔍 Fetching @{username}..."):
-                result = get_github_profile(username)
-            
-            if result['status'] == 'error':
-                st.error(f"❌ {result['message']}")
-            else:
-                st.success(f"✅ Profile @{result['username']} extracted!")
-                st.markdown("---")
-                
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    st.image(result['avatar_url'], width=100)
-                with col2:
-                    st.markdown(f"### {result['name']}")
-                    st.caption(f"@{result['username']}")
-                    st.markdown(f"📝 {result['bio']}")
-                
-                st.markdown("---")
-                st.markdown("### 📬 Contact Information")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**📧 Email:** {result['email']}")
-                    st.markdown(f"**📍 Location:** {result['location']}")
-                    st.markdown(f"**🏢 Company:** {result['company']}")
-                with col2:
-                    st.markdown(f"**🌐 Blog:** {result['blog']}")
-                    st.markdown(f"**🐦 Twitter:** {result['twitter']}")
-                    st.markdown(f"**🔗 Profile:** [View]({result['profile_url']})")
-                
-                st.markdown("---")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("📦 Repos", result['public_repos'])
-                col2.metric("👥 Followers", result['followers'])
-                col3.metric("👤 Following", result['following'])
-                
-                with st.expander("📋 Raw Data"):
-                    st.json(result)
-    
-    else:  # Company Profile
-        if not company_name:
-            st.warning("Please enter a company name.")
-        else:
-            with st.spinner(f"🔍 Searching for '{company_name}'..."):
-                result = get_company_info(company_name.strip())
-            
-            if result.get('status') == 'error':
-                st.error(f"❌ {result.get('error', 'Unknown error')}")
-            else:
-                st.success(f"✅ Information for '{result['name']}' extracted!")
-                st.markdown("---")
-                
-                st.markdown(f"### 🏢 {result['name']}")
-                st.caption(f"📌 Source: {result['source']}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**📅 Founded:** {result['founded']}")
-                    st.markdown(f"**👤 Founder:** {result['founder']}")
-                    st.markdown(f"**👔 CEO:** {result['ceo']}")
-                    st.markdown(f"**📧 Email:** {result['email']}")
-                with col2:
-                    st.markdown(f"**📍 Headquarters:** {result['headquarters']}")
-                    st.markdown(f"**🏭 Industry:** {result['industry']}")
-                    st.markdown(f"**👥 Employees:** {result['employees']}")
-                    st.markdown(f"**📞 Phone:** {result['phone']}")
-                
-                if result['website'] != 'Not found':
-                    st.markdown(f"**🌐 Website:** [{result['website']}](https://{result['website']})")
-                if result['address'] != 'Not found':
-                    st.markdown(f"**📍 Address:** {result['address']}")
-                if result['description'] != 'Not found':
-                    st.markdown("---")
-                    st.markdown("### 📝 About")
-                    st.write(result['description'])
-                
-                st.markdown("---")
-                st.caption(f"🕐 Extracted: {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
-                with st.expander("📋 Raw Data"):
-                    st.json(result)
-
-# ── SAMPLES ────────────────────────────────────────────────────
-with st.expander("💡 Samples"):
-    if mode == "🐙 GitHub Profile":
-        st.markdown("""
-        - `octocat`
-        - `torvalds`
-        - `gvanrossum`
-        - `defunkt`
-        """)
-    else:
-        st.markdown("""
-        - `Google`
-        - `Microsoft`
-        - `Infosys`
-        - `Narola Infotech`
-        - `Vasundhara Infotech LLP`
-        - `Codedsot Solutions LLP`
-        - `TCS`
-        - `Amazon`
-        """)
-
-# ── FOOTER ─────────────────────────────────────────────────────
-st.markdown("""
-<div style="text-align: center; color: #999; padding: 2rem 0 0.5rem 0; font-size: 0.8rem; border-top: 1px solid #eee; margin-top: 2rem;">
-    ContactIQ · Profile Extractor<br>
-    <span style="font-size: 0.7rem;">GitHub API · Google Search · Mistral AI</span>
-</div>
-""", unsafe_allow_html=True)
