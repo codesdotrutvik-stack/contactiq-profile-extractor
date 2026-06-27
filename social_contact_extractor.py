@@ -4,14 +4,13 @@ from bs4 import BeautifulSoup
 import re
 import json
 from datetime import datetime
-import time
 
 # ── MISTRAL API KEY ────────────────────────────────────────────
 MISTRAL_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
 
 # ── PAGE CONFIG ────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ContactIQ — Profile Extractor",
+    page_title="ContactIQ — Social Contact Extractor",
     page_icon="🔍",
     layout="centered"
 )
@@ -40,7 +39,7 @@ st.markdown("---")
 if mode == "🐙 GitHub Profile":
     username = st.text_input("GitHub Username", placeholder="octocat", label_visibility="collapsed")
 else:
-    company_name = st.text_input("Company Name", placeholder="Google or Narola Infotech", label_visibility="collapsed")
+    company_name = st.text_input("Company Name", placeholder="Vasundhara Infotech LLP", label_visibility="collapsed")
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
@@ -51,21 +50,13 @@ with col2:
 # ════════════════════════════════════════════════════════════════
 
 def get_github_profile(username):
-    """Fetch GitHub profile data using public API"""
     try:
         url = f"https://api.github.com/users/{username}"
-        headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'ContactIQ-App'}
+        headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'ContactIQ'}
         response = requests.get(url, headers=headers, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            created = data.get('created_at', '')
-            if created:
-                try:
-                    created = datetime.strptime(created, '%Y-%m-%dT%H:%M:%SZ').strftime('%d %b %Y')
-                except:
-                    created = created.split('T')[0]
-            
             return {
                 'status': 'success',
                 'name': data.get('name') or data.get('login', 'Not found'),
@@ -79,68 +70,94 @@ def get_github_profile(username):
                 'public_repos': data.get('public_repos', 0),
                 'followers': data.get('followers', 0),
                 'following': data.get('following', 0),
-                'created_at': created,
                 'profile_url': data.get('html_url', ''),
                 'avatar_url': data.get('avatar_url', '')
             }
         elif response.status_code == 404:
             return {'status': 'error', 'message': f"User '{username}' not found"}
-        elif response.status_code == 403:
-            return {'status': 'error', 'message': "Rate limit exceeded. Please try again later."}
         else:
             return {'status': 'error', 'message': f"HTTP {response.status_code}"}
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
 
 # ════════════════════════════════════════════════════════════════
-# ── COMPANY EXTRACTION (Mistral AI + Wikipedia) ──────────────
+# ── COMPANY EXTRACTION (Google Search + Mistral AI) ──────────
 # ════════════════════════════════════════════════════════════════
 
-def get_wikipedia_data(query):
-    """Get company data from Wikipedia"""
+def google_search_company(query):
+    """Search Google and extract company info"""
     try:
-        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{query.replace(' ', '_')}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return {
-                'title': data.get('title', ''),
-                'extract': data.get('extract', ''),
-                'description': data.get('description', '')
-            }
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        url = f"https://www.google.com/search?q={query.replace(' ', '+')}+company+contact"
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return None
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        text = soup.get_text(separator=' ', strip=True)
+        
+        info = {
+            'phone': None,
+            'email': None,
+            'website': None,
+            'address': None,
+            'description': None,
+            'founder': None,
+            'employees': None
+        }
+        
+        # Phone
+        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', text)
+        if phone_match:
+            info['phone'] = phone_match.group(1).strip()
+        
+        # Email
+        email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+        if email_match:
+            info['email'] = email_match.group(0).strip()
+        
+        # Website
+        website_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
+        if website_match:
+            info['website'] = website_match.group(1).strip()
+        
+        # Address
+        address_match = re.search(r'\d{1,5}\s[\w\s]{2,40}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Highway|Hwy)[\w\s,\.]{0,60}', text, re.IGNORECASE)
+        if address_match:
+            info['address'] = address_match.group(0).strip()
+        
+        # Description
+        meta_desc = soup.find('meta', {'name': 'description'})
+        if meta_desc:
+            info['description'] = meta_desc.get('content', '')[:300]
+        
+        # Employees
+        employees_match = re.search(r'(\d+)\s*(?:employees|staff|people|team)', text, re.IGNORECASE)
+        if employees_match:
+            info['employees'] = employees_match.group(1)
+        
+        return info
     except:
-        pass
-    return None
+        return None
 
-def call_mistral_company(company_name, wiki_data):
-    """Call Mistral AI to extract company details"""
+def call_mistral_company(company_name):
+    """Call Mistral AI for additional company details"""
     try:
-        context = f"Company Name: {company_name}\n"
-        if wiki_data and wiki_data.get('extract'):
-            context += f"Wikipedia: {wiki_data['extract'][:2000]}\n"
-        else:
-            # If no Wikipedia data, still try with company name
-            context += f"Please search your knowledge for company: {company_name}\n"
-        
         prompt = f"""
-        Extract company information from the following text and your knowledge:
+        Based on your knowledge, provide information about this company:
+        {company_name}
         
-        {context}
-        
-        Extract and return ONLY valid JSON:
+        Return ONLY JSON:
         {{
-            "name": "company name",
-            "founded": "year founded or Not found",
-            "founder": "founder name or Not found",
-            "ceo": "CEO name or Not found",
+            "founded": "year or Not found",
+            "founder": "name or Not found",
+            "ceo": "name or Not found",
             "headquarters": "location or Not found",
-            "industry": "industry sector or Not found",
-            "employees": "number of employees or Not found",
-            "website": "company website or Not found",
-            "email": "company email or Not found",
-            "phone": "company phone or Not found",
-            "address": "company address or Not found",
-            "description": "brief description or Not found"
+            "industry": "sector or Not found"
         }}
         """
         
@@ -150,7 +167,7 @@ def call_mistral_company(company_name, wiki_data):
             json={
                 "model": "mistral-small-latest",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 500,
+                "max_tokens": 300,
                 "temperature": 0.1
             },
             timeout=30
@@ -159,9 +176,9 @@ def call_mistral_company(company_name, wiki_data):
         if response.status_code == 200:
             data = response.json()
             raw = data['choices'][0]['message']['content']
-            json_match = re.search(r'\{[\s\S]*\}', raw)
-            if json_match:
-                return json.loads(json_match.group())
+            match = re.search(r'\{[\s\S]*\}', raw)
+            if match:
+                return json.loads(match.group())
         return None
     except:
         return None
@@ -181,28 +198,36 @@ def get_company_info(company_name):
         'phone': 'Not found',
         'address': 'Not found',
         'description': 'Not found',
-        'source': 'Wikipedia + Mistral AI'
+        'source': 'Google Search + Mistral AI'
     }
     
     try:
-        # Step 1: Get Wikipedia data
-        wiki_data = get_wikipedia_data(company_name)
-        if wiki_data:
-            result['description'] = wiki_data.get('extract', '')[:400]
-            result['source'] = 'Wikipedia + Mistral AI'
-        else:
-            result['source'] = 'Mistral AI (Knowledge)'
+        # Step 1: Google Search
+        google_data = google_search_company(company_name)
+        if google_data:
+            for key, value in google_data.items():
+                if value:
+                    if key == 'phone':
+                        result['phone'] = value
+                    elif key == 'email':
+                        result['email'] = value
+                    elif key == 'website':
+                        result['website'] = value
+                    elif key == 'address':
+                        result['address'] = value
+                    elif key == 'description':
+                        result['description'] = value
+                    elif key == 'employees':
+                        result['employees'] = value
+                    elif key == 'founder':
+                        result['founder'] = value
         
-        # Step 2: Call Mistral AI (with or without Wikipedia data)
-        mistral_result = call_mistral_company(company_name, wiki_data)
-        if mistral_result:
-            for key in ['name', 'founded', 'founder', 'ceo', 'headquarters', 'industry', 
-                       'employees', 'website', 'email', 'phone', 'address', 'description']:
-                if mistral_result.get(key) and mistral_result[key] != 'Not found':
-                    if key == 'name' and 'Not found' not in mistral_result[key]:
-                        result[key] = mistral_result[key]
-                    elif key != 'name':
-                        result[key] = mistral_result[key]
+        # Step 2: Mistral AI
+        mistral_data = call_mistral_company(company_name)
+        if mistral_data:
+            for key in ['founded', 'founder', 'ceo', 'headquarters', 'industry']:
+                if mistral_data.get(key) and mistral_data[key] != 'Not found':
+                    result[key] = mistral_data[key]
         
         result['status'] = 'success'
         
@@ -222,13 +247,13 @@ if extract_btn:
             st.warning("Please enter a GitHub username.")
         else:
             username = username.strip().replace('@', '').split('/')[-1]
-            with st.spinner(f"🔍 Fetching @{username} from GitHub..."):
+            with st.spinner(f"🔍 Fetching @{username}..."):
                 result = get_github_profile(username)
             
             if result['status'] == 'error':
                 st.error(f"❌ {result['message']}")
             else:
-                st.success(f"✅ Profile @{result['username']} extracted successfully!")
+                st.success(f"✅ Profile @{result['username']} extracted!")
                 st.markdown("---")
                 
                 col1, col2 = st.columns([1, 3])
@@ -236,7 +261,7 @@ if extract_btn:
                     st.image(result['avatar_url'], width=100)
                 with col2:
                     st.markdown(f"### {result['name']}")
-                    st.caption(f"@{result['username']} · Joined {result['created_at']}")
+                    st.caption(f"@{result['username']}")
                     st.markdown(f"📝 {result['bio']}")
                 
                 st.markdown("---")
@@ -249,19 +274,13 @@ if extract_btn:
                 with col2:
                     st.markdown(f"**🌐 Blog:** {result['blog']}")
                     st.markdown(f"**🐦 Twitter:** {result['twitter']}")
-                    st.markdown(f"**🔗 Profile:** [View on GitHub]({result['profile_url']})")
+                    st.markdown(f"**🔗 Profile:** [View]({result['profile_url']})")
                 
                 st.markdown("---")
-                st.markdown("### 📊 GitHub Stats")
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("📦 Repositories", result['public_repos'])
-                with col2:
-                    st.metric("👥 Followers", result['followers'])
-                with col3:
-                    st.metric("👤 Following", result['following'])
-                with col4:
-                    st.metric("📅 Joined", result['created_at'])
+                col1, col2, col3 = st.columns(3)
+                col1.metric("📦 Repos", result['public_repos'])
+                col2.metric("👥 Followers", result['followers'])
+                col3.metric("👤 Following", result['following'])
                 
                 with st.expander("📋 Raw Data"):
                     st.json(result)
@@ -318,27 +337,24 @@ with st.expander("💡 Samples"):
         - `octocat`
         - `torvalds`
         - `gvanrossum`
-        - `defunkt`
         """)
     else:
         st.markdown("""
-        ### 🏢 Famous Companies
+        ### 🏢 Try These Companies
+        - `Vasundhara Infotech LLP`
         - `Google`
+        - `Narola Infotech`
         - `Microsoft`
+        - `Codedsot Solutions LLP`
         - `Amazon`
         - `Infosys`
         - `TCS`
-        
-        ### 🏭 Local Companies
-        - `Narola Infotech`
-        - `Codedsot Solutions LLP`
-        - `Zomato`
         """)
 
 # ── FOOTER ─────────────────────────────────────────────────────
 st.markdown("""
 <div style="text-align: center; color: #999; padding: 2rem 0 0.5rem 0; font-size: 0.8rem; border-top: 1px solid #eee; margin-top: 2rem;">
-    ContactIQ · Profile Extractor<br>
-    <span style="font-size: 0.7rem;">GitHub API · Wikipedia · Mistral AI</span>
+    ContactIQ · Social Contact Extractor<br>
+    <span style="font-size: 0.7rem;">GitHub API · Google Search · Mistral AI</span>
 </div>
 """, unsafe_allow_html=True)
