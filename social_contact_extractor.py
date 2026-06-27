@@ -298,10 +298,18 @@ if extract_btn:
 with st.expander("💡 Samples"):
     if mode == "🐙 GitHub Profile":
         st.markdown("""
-        - `octocat`
-        - `torvalds`
-        - `gvanrossum`
-        - `defunkt`
+        ### 🐙 GitHub Developers
+        - `octocat` (GitHub Mascot)
+        - `torvalds` (Linus Torvalds - Linux Creator)
+        - `gvanrossum` (Guido van Rossum - Python Creator)
+        - `defunkt` (GitHub Co-founder)
+        - `brettcannon` (Python Core Developer)
+        - `hugovk` (Python Core Developer)
+        - `kevinjalbert` (Shopify Staff Developer)
+        - `lalithr95` (Shopify Software Developer)
+        - `RatulHasan` (Shopify App Developer)
+        - `yyx990803` (Evan You - Vue.js Creator)
+        - `karpathy` (Andrej Karpathy - AI Researcher)
         """)
     else:
         st.markdown("""
