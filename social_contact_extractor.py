@@ -182,8 +182,7 @@ def get_company_info(company_name):
         'email': 'Not found',
         'phone': 'Not found',
         'address': 'Not found',
-        'description': 'Not found',
-        'source': 'DuckDuckGo + Mistral AI'
+        'description': 'Not found'
     }
     
     try:
@@ -272,7 +271,6 @@ if extract_btn:
                 st.markdown("---")
                 
                 st.markdown(f"### 🏢 {result['name']}")
-                st.caption(f"📌 Source: {result['source']}")
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -290,10 +288,6 @@ if extract_btn:
                     st.markdown(f"**🌐 Website:** [{result['website']}](https://{result['website']})")
                 if result['address'] != 'Not found':
                     st.markdown(f"**📍 Address:** {result['address']}")
-                if result['description'] != 'Not found':
-                    st.markdown("---")
-                    st.markdown("### 📝 About")
-                    st.write(result['description'])
                 
                 st.markdown("---")
                 st.caption(f"🕐 Extracted: {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
