@@ -39,7 +39,7 @@ st.markdown("---")
 if mode == "🐙 GitHub Profile":
     username = st.text_input("GitHub Username", placeholder="octocat", label_visibility="collapsed")
 else:
-    company_name = st.text_input("Company Name", placeholder="Vasundhara Infotech LLP", label_visibility="collapsed")
+    company_name = st.text_input("Company Name", placeholder="Google", label_visibility="collapsed")
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
@@ -308,11 +308,10 @@ with st.expander("💡 Samples"):
         - `Google`
         - `Microsoft`
         - `Infosys`
-        - `Narola Infotech`
-        - `Vasundhara Infotech LLP`
-        - `Codedsot Solutions LLP`
         - `TCS`
         - `Amazon`
+        - `Apple`
+        - `Narola Infotech`
         """)
 
 # ── FOOTER ─────────────────────────────────────────────────────
