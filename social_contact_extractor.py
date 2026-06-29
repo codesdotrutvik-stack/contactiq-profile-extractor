@@ -1,5 +1,4 @@
-# app.py - Fixed Multi-Platform Profile Analyzer
-# Complete working version with ChromeDriver error handling
+# app.py - YouTube Fix with Selenium for dynamic content
 
 import streamlit as st
 import requests
@@ -8,70 +7,24 @@ import re
 import json
 import time
 import os
-import subprocess
-import sys
+import shutil
 from urllib.parse import urlparse, urljoin
 from datetime import datetime
-import platform
 
-# ============== SELENIUM SETUP WITH ERROR HANDLING ==============
-def setup_selenium():
-    """Setup Selenium with proper error handling and ChromeDriver management"""
-    try:
-        # Check if Chrome is installed
-        chrome_paths = []
-        if platform.system() == "Windows":
-            chrome_paths = [
-                "C:/Program Files/Google/Chrome/Application/chrome.exe",
-                "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
-            ]
-        elif platform.system() == "Darwin":  # macOS
-            chrome_paths = [
-                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            ]
-        else:  # Linux
-            chrome_paths = [
-                "/usr/bin/google-chrome",
-                "/usr/bin/chromium-browser",
-                "/usr/bin/chromium"
-            ]
-        
-        chrome_installed = any(os.path.exists(path) for path in chrome_paths)
-        
-        if not chrome_installed:
-            return None, "Chrome browser not found. Please install Google Chrome or Chromium."
-        
-        # Try to import selenium
-        try:
-            from selenium import webdriver
-            from selenium.webdriver.chrome.options import Options
-            from selenium.webdriver.chrome.service import Service
-            from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
-        except ImportError as e:
-            return None, f"Selenium not installed: {str(e)}. Run: pip install selenium webdriver-manager"
-        
-        # Try to import webdriver_manager
-        try:
-            from webdriver_manager.chrome import ChromeDriverManager
-            from webdriver_manager.core.utils import ChromeType
-        except ImportError:
-            return None, "webdriver-manager not installed. Run: pip install webdriver-manager"
-        
-        return (webdriver, Options, Service, By, WebDriverWait, EC, 
-                TimeoutException, NoSuchElementException, WebDriverException, 
-                ChromeDriverManager, ChromeType), "Success"
-        
-    except Exception as e:
-        return None, f"Selenium setup failed: {str(e)}"
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException, NoSuchElementException
+    from webdriver_manager.chrome import ChromeDriverManager
+    SELENIUM_AVAILABLE = True
+except ImportError:
+    SELENIUM_AVAILABLE = False
 
-SELENIUM_SETUP = setup_selenium()
-SELENIUM_AVAILABLE = SELENIUM_SETUP[0] is not None
-SELENIUM_ERROR = SELENIUM_SETUP[1] if not SELENIUM_AVAILABLE else None
-
-# ============== PAGE CONFIG ==============
+# ============== LIGHT MODE CONFIG ==============
 st.set_page_config(
     page_title="Multi-Platform Profile Analyzer",
     page_icon="🔍",
@@ -79,7 +32,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ============== STYLES ==============
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fa !important; color: #212529 !important; }
@@ -98,166 +50,222 @@ st.markdown("""
     .linkedin-info { background: #e3f2fd; color: #1565c0; padding: 20px; border-radius: 12px; border-left: 5px solid #2196f3; margin: 15px 0; }
     .youtube-stats { background: #ffebee; color: #c62828; padding: 15px; border-radius: 10px; border-left: 5px solid #f44336; margin: 10px 0; }
     .footer { text-align: center; color: #6c757d; font-size: 0.9rem; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; }
-    .chrome-fix-box { background: #e8f5e9; color: #1b5e20; padding: 20px; border-radius: 10px; border-left: 5px solid #4caf50; margin: 15px 0; }
     </style>
 """, unsafe_allow_html=True)
 
-# ============== SELENIUM SCRAPER ==============
+
+# ============== SELENIUM HELPER ==============
+
 class SeleniumScraper:
     def __init__(self):
         self.driver = None
-        self.setup_success = False
-        self.error_message = None
-        
-    def init_driver(self):
-        """Initialize Chrome driver with fallback options"""
-        if not SELENIUM_AVAILABLE:
-            self.error_message = SELENIUM_ERROR or "Selenium not available"
-            return None
-        
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _find_chrome_binary(self):
+        """Auto-detect Chrome or Chromium binary on the host system."""
+        candidates = [
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+        ]
+        for name in candidates:
+            found = shutil.which(name)
+            if found:
+                return found
+        # Absolute path fallbacks (common on Ubuntu / Streamlit Cloud)
+        abs_paths = [
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+        ]
+        for p in abs_paths:
+            if os.path.isfile(p):
+                return p
+        return None
+
+    def _find_chromedriver(self):
+        """
+        Prefer the system chromedriver (version-matched to installed
+        Chromium) then fall back to webdriver-manager.
+        """
+        system = shutil.which("chromedriver")
+        if system:
+            return system
+        # Fall back to webdriver-manager download
+        return ChromeDriverManager().install()
+
+    def _requests_fallback(self, url):
+        """
+        Basic BeautifulSoup scrape via requests.
+        Returns a parsed soup or None. Only OG/meta tags are reliable
+        here — dynamic content won't be present.
+        """
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+        }
         try:
-            webdriver, Options, Service, By, WebDriverWait, EC, TimeoutException, NoSuchElementException, WebDriverException, ChromeDriverManager, ChromeType = SELENIUM_SETUP[0]
-            
-            options = Options()
-            options.add_argument("--headless")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("--disable-extensions")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
-            options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.0")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option('useAutomationExtension', False)
-            
-            # Try multiple ways to get ChromeDriver
-            driver = None
-            errors = []
-            
-            # Method 1: Use webdriver_manager
-            try:
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=options)
-            except Exception as e:
-                errors.append(f"webdriver_manager failed: {str(e)}")
-                
-                # Method 2: Try without service (let selenium find it)
-                try:
-                    driver = webdriver.Chrome(options=options)
-                except Exception as e2:
-                    errors.append(f"Direct Chrome failed: {str(e2)}")
-                    
-                    # Method 3: Try with ChromeDriverManager from specific path
-                    try:
-                        from webdriver_manager.chrome import ChromeDriverManager
-                        from selenium.webdriver.chrome.service import Service as ChromeService
-                        chrome_driver_path = ChromeDriverManager().install()
-                        # On Linux, sometimes the path needs to be fixed
-                        if platform.system() == "Linux" and "chromedriver-linux64" in chrome_driver_path:
-                            # Try to use the chromedriver directly
-                            service = ChromeService(chrome_driver_path)
-                            driver = webdriver.Chrome(service=service, options=options)
-                    except Exception as e3:
-                        errors.append(f"Fallback failed: {str(e3)}")
-            
-            if driver is None:
-                self.error_message = " | ".join(errors)
-                return None
-            
-            # Execute CDP command to hide automation
-            try:
-                driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                    'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
-                })
-            except:
-                pass
-            
-            self.driver = driver
-            self.setup_success = True
-            return driver
-            
-        except Exception as e:
-            self.error_message = f"Driver initialization failed: {str(e)}"
+            r = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+            if r.status_code == 200:
+                return BeautifulSoup(r.text, "html.parser")
             return None
-    
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------
+    # Driver init
+    # ------------------------------------------------------------------
+
+    def init_driver(self):
+        if not SELENIUM_AVAILABLE:
+            return None
+
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument(
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.0"
+        )
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+
+        # ---- KEY FIX: set binary location for Chrome/Chromium ----
+        chrome_bin = self._find_chrome_binary()
+        if chrome_bin:
+            options.binary_location = chrome_bin
+        else:
+            st.error(
+                "❌ Chrome/Chromium binary not found on this server.\n\n"
+                "**Fix:** Make sure `packages.txt` contains `chromium-browser` "
+                "and redeploy the app."
+            )
+            return None
+
+        try:
+            service = Service(self._find_chromedriver())
+            driver = webdriver.Chrome(service=service, options=options)
+            driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
+            )
+            self.driver = driver
+            return driver
+        except Exception as e:
+            st.error(f"❌ ChromeDriver failed: {str(e)}")
+            return None
+
+    # ------------------------------------------------------------------
+    # Page loading methods
+    # ------------------------------------------------------------------
+
     def get_page(self, url, wait_time=10):
         if not self.driver:
             self.init_driver()
         if not self.driver:
-            return None
-            
+            st.info("ℹ️ Selenium unavailable — using requests fallback (OG/meta tags only).")
+            return self._requests_fallback(url)
+
         try:
             self.driver.get(url)
             time.sleep(5)
-            
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            from selenium.webdriver.common.by import By
-            
             WebDriverWait(self.driver, wait_time).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             time.sleep(3)
-            
-            return BeautifulSoup(self.driver.page_source, 'html.parser')
-        except Exception as e:
+            return BeautifulSoup(self.driver.page_source, "html.parser")
+        except TimeoutException:
             try:
-                return BeautifulSoup(self.driver.page_source, 'html.parser')
-            except:
-                return None
-    
+                return BeautifulSoup(self.driver.page_source, "html.parser")
+            except Exception:
+                return self._requests_fallback(url)
+        except Exception as e:
+            st.warning(f"⚠️ Selenium error ({e}). Trying requests fallback…")
+            return self._requests_fallback(url)
+
     def get_youtube_data(self, url):
         """Special method for YouTube with dynamic content waiting."""
         if not self.driver:
             self.init_driver()
         if not self.driver:
-            return None
-            
+            st.info("ℹ️ Selenium unavailable — YouTube subscriber/video counts may be missing.")
+            return self._requests_fallback(url)
+
         try:
             self.driver.get(url)
+            # Wait longer for YouTube dynamic content
             time.sleep(8)
-            
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            from selenium.webdriver.common.by import By
-            
             try:
                 WebDriverWait(self.driver, 15).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#subscriber-count, yt-formatted-string#subscriber-count, .yt-formatted-string"))
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "#subscriber-count, yt-formatted-string#subscriber-count, .yt-formatted-string")
+                    )
                 )
-            except:
+            except Exception:
                 pass
-            
             time.sleep(3)
-            return BeautifulSoup(self.driver.page_source, 'html.parser')
+            return BeautifulSoup(self.driver.page_source, "html.parser")
         except Exception as e:
+            st.warning(f"⚠️ YouTube Selenium error: {e}")
             try:
-                return BeautifulSoup(self.driver.page_source, 'html.parser')
-            except:
-                return None
-    
+                return BeautifulSoup(self.driver.page_source, "html.parser")
+            except Exception:
+                return self._requests_fallback(url)
+
     def close(self):
         if self.driver:
             try:
                 self.driver.quit()
-            except:
+            except Exception:
                 pass
             self.driver = None
 
+
 # ============== DISPLAY FUNCTIONS ==============
+
 def display_youtube(data):
+    """Display YouTube data with better formatting."""
     st.subheader("📺 YouTube Channel")
     
+    # Stats in big boxes
     cols = st.columns(3)
     
     subscribers = data.get('subscribers', 'N/A')
     videos = data.get('video_count', 'N/A')
     views = data.get('view_count', 'N/A')
     
+    # Format numbers nicely
+    if subscribers and subscribers != 'N/A':
+        subscribers_display = subscribers
+    else:
+        subscribers_display = 'N/A'
+    
+    if videos and videos != 'N/A':
+        videos_display = videos
+    else:
+        videos_display = 'N/A'
+    
     metrics = [
-        (cols[0], "👥 Subscribers", subscribers, "#ff0000"),
-        (cols[1], "🎬 Videos", videos, "#ff6d00"),
-        (cols[2], "👀 Views", views, "#00c853")
+        (cols[0], "👥 Subscribers", subscribers_display, "#ff0000"),
+        (cols[1], "🎬 Videos", videos_display, "#ff6d00"),
+        (cols[2], "👀 Views", views if views != 'N/A' else 'N/A', "#00c853")
     ]
     
     for col, label, value, color in metrics:
@@ -269,6 +277,7 @@ def display_youtube(data):
                 </div>
             """, unsafe_allow_html=True)
     
+    # Channel info
     if data.get('channel_name'):
         st.markdown(f"**Channel:** {data['channel_name']}")
     if data.get('handle'):
@@ -278,6 +287,7 @@ def display_youtube(data):
     if data.get('location'):
         st.markdown(f"**📍 Location:** {data['location']}")
     
+    # Description with links
     if data.get('description'):
         with st.expander("📝 Description"):
             st.write(data['description'])
@@ -285,8 +295,18 @@ def display_youtube(data):
                 st.markdown("**🔗 Links:**")
                 for link in data['links']:
                     st.markdown(f"• [{link}]({link})")
+    
+    # Banner image
+    if data.get('banner_image'):
+        st.image(data['banner_image'], use_column_width=True)
+    
+    # Profile image
+    if data.get('profile_image'):
+        st.image(data['profile_image'], width=200)
+
 
 def display_linkedin(data):
+    """Display LinkedIn data with API suggestion."""
     st.subheader("💼 LinkedIn Profile")
     
     if data.get('is_blocked') or data.get('name') in ['Sign Up', 'Join now', 'LinkedIn', None]:
@@ -304,6 +324,7 @@ def display_linkedin(data):
                 <ol>
                     <li><b>LinkedIn API (Official):</b> <a href="https://developer.linkedin.com/" target="_blank">developer.linkedin.com</a></li>
                     <li><b>LinkedIn Sales Navigator:</b> Paid tool with export features</li>
+                    <li><b>PhantomBuster:</b> Cloud-based scraping service</li>
                     <li><b>Manual Export:</b> LinkedIn allows PDF profile export</li>
                 </ol>
             </div>
@@ -313,16 +334,52 @@ def display_linkedin(data):
             st.write(f"**URL:** {data.get('profile_url', 'N/A')}")
             st.write(f"**Username:** {data.get('username', 'N/A')}")
             st.write(f"**Page Title:** {data.get('page_title', 'N/A')}")
+            if data.get('page_text_sample'):
+                st.write(f"**Page Text Sample:** {data['page_text_sample'][:200]}...")
+        
+        # Manual entry
+        st.markdown("---")
+        st.markdown("### 📝 Manual Data Entry (If you have access)")
+        
+        with st.expander("➕ Add LinkedIn Data Manually"):
+            manual_name = st.text_input("Name", value=data.get('name') if data.get('name') not in ['Sign Up', 'Join now', None] else "")
+            manual_headline = st.text_input("Headline/Title")
+            manual_location = st.text_input("Location")
+            manual_email = st.text_input("Email (if visible on profile)")
+            manual_phone = st.text_input("Phone (if visible on profile)")
+            
+            if st.button("💾 Save Manual Data"):
+                st.success("✅ Data saved! (Note: This is for display only, not stored permanently)")
+                st.json({
+                    "name": manual_name,
+                    "headline": manual_headline,
+                    "location": manual_location,
+                    "email": manual_email,
+                    "phone": manual_phone,
+                    "source": "manual_entry"
+                })
+    
     else:
         col1, col2 = st.columns([1, 2])
+        
         with col1:
-            st.markdown("""<div style="width:150px;height:150px;background:#ddd;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3rem;">👤</div>""", unsafe_allow_html=True)
+            if data.get('profile_image') and 'linkedin.com' not in data['profile_image']:
+                st.image(data['profile_image'], width=150)
+            else:
+                st.markdown("""<div style="width:150px;height:150px;background:#ddd;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3rem;">👤</div>""", unsafe_allow_html=True)
+        
         with col2:
             st.markdown(f"**Name:** {data.get('name', 'N/A')}")
             st.markdown(f"**Headline:** {data.get('headline', 'N/A')}")
             st.markdown(f"**Location:** {data.get('location', 'N/A')}")
+            if data.get('connections'):
+                st.markdown(f"**Connections:** {data['connections']}")
+            if data.get('followers'):
+                st.markdown(f"**Followers:** {data['followers']}")
+
 
 def display_facebook(data):
+    """Display Facebook data."""
     st.subheader("📘 Facebook Page")
     
     col1, col2 = st.columns(2)
@@ -344,12 +401,12 @@ def display_facebook(data):
     
     with col2:
         if data.get('address') and data['address'] != 'N/A':
-            st.markdown(f"""
+            st.markdown("""
                 <div class="address-box">
                     <b>📍 Address:</b><br>
-                    {data['address'].replace(', ', '<br>')}
+                    {}
                 </div>
-            """, unsafe_allow_html=True)
+            """.format(data['address'].replace(', ', '<br>')), unsafe_allow_html=True)
         
         if data.get('phone'):
             st.markdown(f"**📞 Phone:** {data['phone']}")
@@ -357,8 +414,16 @@ def display_facebook(data):
             st.markdown(f"**✉️ Email:** {data['email']}")
         if data.get('website'):
             st.markdown(f"**🌐 Website:** [{data['website']}]({data['website']})")
+        if data.get('hours'):
+            st.markdown(f"**🕐 Hours:** {data['hours']}")
+    
+    if data.get('description'):
+        with st.expander("📝 Description"):
+            st.write(data['description'])
+
 
 def display_instagram(data):
+    """Display Instagram data."""
     st.subheader("📸 Instagram Profile")
     
     cols = st.columns(4)
@@ -384,8 +449,12 @@ def display_instagram(data):
         st.markdown(f"**Bio:** {data['bio']}")
     if data.get('external_url'):
         st.markdown(f"**🔗 Link:** [{data['external_url']}]({data['external_url']})")
+    if data.get('profile_image'):
+        st.image(data['profile_image'], width=200)
+
 
 def display_company(data):
+    """Display company website data."""
     st.subheader("🏢 Company Website")
     
     col1, col2 = st.columns(2)
@@ -408,8 +477,15 @@ def display_company(data):
         with st.expander(f"📞 Phones ({len(data['phones'])})"):
             for phone in data['phones']:
                 st.code(phone)
+    
+    if data.get('addresses'):
+        with st.expander(f"📍 Addresses ({len(data['addresses'])})"):
+            for addr in data['addresses']:
+                st.write(f"• {addr}")
+
 
 # ============== ANALYZER CLASS ==============
+
 class MultiPlatformAnalyzer:
     def __init__(self):
         self.session = requests.Session()
@@ -508,14 +584,45 @@ class MultiPlatformAnalyzer:
         }
         
         try:
+            # Use special YouTube method with longer wait
             soup = self.selenium.get_youtube_data(url)
             
             if not soup:
-                results['error'] = 'Selenium failed to load YouTube page'
+                results['error'] = 'Failed to load YouTube page'
                 return results
             
+            # Method 1: Try to find ytInitialData (YouTube's initial data)
+            scripts = soup.find_all('script')
+            yt_data = None
+            
+            for script in scripts:
+                if script.string and 'ytInitialData' in script.string:
+                    try:
+                        # Extract JSON from script
+                        json_match = re.search(r'ytInitialData\s*=\s*({.+?});', script.string, re.DOTALL)
+                        if json_match:
+                            yt_data = json.loads(json_match.group(1))
+                            break
+                    except:
+                        pass
+            
+            # Method 2: Extract from meta tags
+            meta_title = soup.find('meta', property='og:title')
+            if meta_title:
+                results['channel_name'] = meta_title.get('content', '').replace(' - YouTube', '').strip()
+            
+            meta_desc = soup.find('meta', property='og:description')
+            if meta_desc:
+                results['description'] = meta_desc.get('content')
+            
+            meta_image = soup.find('meta', property='og:image')
+            if meta_image:
+                results['banner_image'] = meta_image.get('content')
+            
+            # Method 3: Parse from visible text (more reliable for stats)
             visible_text = soup.get_text(separator=' ', strip=True)
             
+            # YouTube subscriber patterns (from rendered page)
             subscriber_patterns = [
                 r'([\d,.]+[KMBkmb]?)\s*subscribers?',
                 r'subscribers?\s*[:·]\s*([\d,.]+[KMBkmb]?)',
@@ -528,6 +635,7 @@ class MultiPlatformAnalyzer:
                     results['subscribers'] = match.group(1).strip()
                     break
             
+            # Video count patterns
             video_patterns = [
                 r'([\d,.]+[KMBkmb]?)\s*videos?',
                 r'videos?\s*[:·]\s*([\d,.]+[KMBkmb]?)',
@@ -540,20 +648,54 @@ class MultiPlatformAnalyzer:
                     results['video_count'] = match.group(1).strip()
                     break
             
-            meta_title = soup.find('meta', property='og:title')
-            if meta_title:
-                results['channel_name'] = meta_title.get('content', '').replace(' - YouTube', '').strip()
+            # View count
+            view_patterns = [
+                r'([\d,.]+[KMBkmb]?)\s*views?',
+                r'total\s*views?\s*[:·]\s*([\d,.]+[KMBkmb]?)',
+            ]
             
-            meta_desc = soup.find('meta', property='og:description')
-            if meta_desc:
-                results['description'] = meta_desc.get('content')
+            for pattern in view_patterns:
+                match = re.search(pattern, visible_text, re.IGNORECASE)
+                if match:
+                    results['view_count'] = match.group(1).strip()
+                    break
             
+            # Try to extract from ytInitialData if available
+            if yt_data:
+                try:
+                    header = yt_data.get('header', {})
+                    c4_tabbed_header = header.get('c4TabbedHeaderRenderer', {})
+                    
+                    subscriber_text = c4_tabbed_header.get('subscriberCountText', {}).get('simpleText', '')
+                    if subscriber_text:
+                        sub_match = re.search(r'([\d,.]+[KMBkmb]?)', subscriber_text)
+                        if sub_match:
+                            results['subscribers'] = sub_match.group(1)
+                    
+                    title = c4_tabbed_header.get('title', '')
+                    if title:
+                        results['channel_name'] = title
+                    
+                    banners = c4_tabbed_header.get('banner', {}).get('thumbnails', [])
+                    if banners:
+                        results['banner_image'] = banners[-1].get('url')
+                    
+                    avatars = c4_tabbed_header.get('avatar', {}).get('thumbnails', [])
+                    if avatars:
+                        results['profile_image'] = avatars[-1].get('url')
+                    
+                except Exception:
+                    pass
+            
+            # Extract links from description
             if results['description']:
                 links = re.findall(r'https?://[^\s<>\"{}|\\^`\[\]]+', results['description'])
                 results['links'] = list(set(links))
+                
                 contacts = self.extract_contact_patterns(results['description'])
                 results['public_email'] = contacts['emails'][0] if contacts['emails'] else None
             
+            # Fallback subscriber search in text nodes
             if not results['subscribers']:
                 sub_texts = soup.find_all(text=re.compile(r'[\d,.]+[KMBkmb]?\s*subscribers?', re.IGNORECASE))
                 for text in sub_texts:
@@ -562,8 +704,101 @@ class MultiPlatformAnalyzer:
                         results['subscribers'] = match.group(1)
                         break
             
+            if not results['video_count']:
+                vid_texts = soup.find_all(text=re.compile(r'[\d,.]+[KMBkmb]?\s*videos?', re.IGNORECASE))
+                for text in vid_texts:
+                    match = re.search(r'([\d,.]+[KMBkmb]?)', str(text))
+                    if match:
+                        results['video_count'] = match.group(1)
+                        break
+            
+            if not results['handle'] and results['channel_name']:
+                handle_match = re.search(r'@(\w+)', url)
+                if handle_match:
+                    results['handle'] = handle_match.group(1)
+            
         except Exception as e:
             results['error'] = f'YouTube analysis failed: {str(e)}'
+        
+        return results
+    
+    def analyze_instagram_selenium(self, url, username):
+        """Instagram with Selenium."""
+        results = {
+            'platform': 'instagram',
+            'username': username,
+            'profile_url': url,
+            'full_name': None,
+            'bio': None,
+            'followers': None,
+            'following': None,
+            'posts_count': None,
+            'profile_image': None,
+            'is_business': False,
+            'external_url': None,
+            'public_email': None,
+            'public_phone': None,
+            'error': None
+        }
+        
+        try:
+            soup = self.selenium.get_page(url, wait_time=15)
+            
+            if not soup:
+                results['error'] = 'Failed to load page'
+                return results
+            
+            meta_title = soup.find('meta', property='og:title')
+            if meta_title:
+                title_content = meta_title.get('content', '')
+                name_match = re.search(r'^([^(]+)\s*\(@', title_content)
+                if name_match:
+                    results['full_name'] = name_match.group(1).strip()
+            
+            meta_desc = soup.find('meta', property='og:description')
+            if meta_desc:
+                desc = meta_desc.get('content', '')
+                numbers = re.findall(r'([\d,MK]+)\s*(?:Followers|Following|Posts)', desc)
+                if len(numbers) >= 3:
+                    results['followers'] = numbers[0]
+                    results['following'] = numbers[1]
+                    results['posts_count'] = numbers[2]
+            
+            meta_image = soup.find('meta', property='og:image')
+            if meta_image:
+                results['profile_image'] = meta_image.get('content')
+            
+            scripts = soup.find_all('script', type='application/ld+json')
+            for script in scripts:
+                try:
+                    data = json.loads(script.string)
+                    if isinstance(data, dict) and 'description' in data:
+                        results['bio'] = data['description']
+                except:
+                    pass
+            
+            if not results['bio'] and meta_desc:
+                desc = meta_desc.get('content', '')
+                bio_match = re.search(r'-\s*See.*?\.\s*(.+)', desc)
+                if bio_match:
+                    results['bio'] = bio_match.group(1).strip()
+            
+            if results['bio']:
+                contacts = self.extract_contact_patterns(results['bio'])
+                results['public_email'] = contacts['emails'][0] if contacts['emails'] else None
+                results['public_phone'] = contacts['phones'][0] if contacts['phones'] else None
+                
+                business_indicators = ['business', 'shop', 'store', 'official', 'contact']
+                results['is_business'] = any(word in results['bio'].lower() for word in business_indicators)
+            
+            link_pattern = r'linktr\.ee/\w+|bit\.ly/\w+|beacons\.ai/\w+'
+            if results['bio']:
+                link_match = re.search(link_pattern, results['bio'])
+                if link_match:
+                    results['external_url'] = f"https://{link_match.group(0)}"
+            
+        except Exception as e:
+            results['error'] = f'Instagram analysis failed: {str(e)}'
         
         return results
     
@@ -592,7 +827,7 @@ class MultiPlatformAnalyzer:
             soup = self.selenium.get_page(url, wait_time=15)
             
             if not soup:
-                results['error'] = 'Selenium failed to load page'
+                results['error'] = 'Failed to load page'
                 return results
             
             meta_title = soup.find('meta', property='og:title')
@@ -623,6 +858,7 @@ class MultiPlatformAnalyzer:
                 r'([\d,]+(?:\.\d+)?[KMBkmb]?)\s*followers?',
                 r'followers?\s*[:·]\s*([\d,]+(?:\.\d+)?[KMBkmb]?)',
                 r'([\d,]+(?:\.\d+)?)\s*people\s*follow\s*this',
+                r'([\d,]+(?:\.\d+)?)\s*follower',
             ]
             
             for pattern in follower_patterns:
@@ -631,17 +867,40 @@ class MultiPlatformAnalyzer:
                     results['followers'] = match.group(1).strip()
                     break
             
+            following_patterns = [
+                r'([\d,]+(?:\.\d+)?[KMBkmb]?)\s*following',
+                r'following\s*[:·]\s*([\d,]+(?:\.\d+)?[KMBkmb]?)',
+                r'([\d,]+)\s*people\s*followed',
+            ]
+            
+            for pattern in following_patterns:
+                match = re.search(pattern, clean_text, re.IGNORECASE)
+                if match:
+                    results['following'] = match.group(1).strip()
+                    break
+            
+            if not results['followers'] and meta_desc:
+                meta_content = meta_desc.get('content', '')
+                for pattern in follower_patterns:
+                    match = re.search(pattern, meta_content, re.IGNORECASE)
+                    if match:
+                        results['followers'] = match.group(1).strip()
+                        break
+            
             address_patterns = [
                 r'(Post\s+Box\s+No\s*\d+[^.]{10,150})',
                 r'(\d+[^,]{5,50}(?:Road|Street|Avenue|Marg)[^,]{5,100}(?:,\s*[A-Za-z\s]+){1,4})',
                 r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?,\s*(?:Gujarat|Maharashtra|Delhi|Rajasthan)[^,]{0,50}(?:,\s*India)?)',
+                r'([A-Za-z\s]+(?:Road|Street|Marg|Nagar|Colony)[^,]{5,80}(?:,\s*[A-Za-z\s]+){1,3})'
             ]
             
             for pattern in address_patterns:
                 match = re.search(pattern, clean_text, re.IGNORECASE)
                 if match:
                     candidate = match.group(1).strip()
-                    if len(candidate) > 15:
+                    if (len(candidate) > 15 and 
+                        any(keyword in candidate.lower() for keyword in 
+                            ['road', 'street', 'avenue', 'marg', 'nagar', 'colony', 'post', 'box', 'surat', 'gujarat', 'india', 'delhi', 'mumbai'])):
                         results['address'] = candidate
                         break
             
@@ -653,6 +912,10 @@ class MultiPlatformAnalyzer:
                     if 'u' in parsed:
                         results['website'] = parsed['u'][0]
                         break
+            
+            hours_match = re.search(r'(?:Hours|Open)[:\s]*([^.]{10,100})', clean_text, re.IGNORECASE)
+            if hours_match:
+                results['hours'] = hours_match.group(1).strip()
             
         except Exception as e:
             results['error'] = f'Facebook analysis failed: {str(e)}'
@@ -682,7 +945,7 @@ class MultiPlatformAnalyzer:
             soup = self.selenium.get_page(url, wait_time=15)
             
             if not soup:
-                results['error'] = 'Selenium failed to load page'
+                results['error'] = 'Failed to load page'
                 return results
             
             page_title = soup.find('title')
@@ -709,6 +972,27 @@ class MultiPlatformAnalyzer:
             meta_desc = soup.find('meta', property='og:description')
             if meta_desc:
                 results['headline'] = meta_desc.get('content', '')
+            
+            meta_image = soup.find('meta', property='og:image')
+            if meta_image:
+                img_url = meta_image.get('content')
+                if img_url and 'linkedin.com' not in img_url:
+                    results['profile_image'] = img_url
+            
+            loc_match = re.search(r'([A-Z][a-z]+(?:,\s*[A-Z][a-z]+)?)\s*(?:Area|Region)', visible_text)
+            if loc_match:
+                results['location'] = loc_match.group(1).strip()
+            
+            conn_match = re.search(r'(\d+)\+?\s*connections?', visible_text, re.IGNORECASE)
+            if conn_match:
+                results['connections'] = conn_match.group(1)
+            
+            follower_match = re.search(r'([\d,]+(?:\.\d+)?[KMB]?)\s*followers?', visible_text, re.IGNORECASE)
+            if follower_match:
+                results['followers'] = follower_match.group(1)
+            
+            contacts = self.extract_contact_patterns(visible_text)
+            results['public_email'] = contacts['emails'][0] if contacts['emails'] else None
             
             if results['is_blocked']:
                 results['name'] = results['name'] or 'Sign Up'
@@ -756,6 +1040,30 @@ class MultiPlatformAnalyzer:
                 results['emails'] = contacts['emails']
                 results['phones'] = contacts['phones']
                 
+                address_patterns = [
+                    r'(?:Address|Headquarters|Office|Location)[:\s]*([^.]{15,200})',
+                    r'(\d+[^.]{10,100}(?:Road|Street|Avenue|City|Nagar)[^.]{10,100})'
+                ]
+                for pattern in address_patterns:
+                    matches = re.findall(pattern, visible_text, re.IGNORECASE)
+                    results['addresses'].extend(matches)
+                
+                social_platforms = {
+                    'linkedin': r'linkedin\.com/(?:in|company)/[\w-]+',
+                    'twitter': r'twitter\.com/[\w-]+',
+                    'facebook': r'facebook\.com/[\w.-]+',
+                    'instagram': r'instagram\.com/[\w.]+',
+                    'youtube': r'youtube\.com/(?:c|channel|@)[\w-]+'
+                }
+                
+                for platform, pattern in social_platforms.items():
+                    matches = re.findall(pattern, response.text)
+                    if matches:
+                        results['social_links'].append({
+                            'platform': platform,
+                            'url': f"https://{matches[0]}"
+                        })
+                
                 for link in soup.find_all('a', href=True):
                     href = link['href'].lower()
                     text = link.get_text().lower()
@@ -765,6 +1073,22 @@ class MultiPlatformAnalyzer:
                     
                     if any(word in href or word in text for word in ['about', 'team']):
                         results['about_page'] = urljoin(url, link['href'])
+                
+                if results['contact_page']:
+                    try:
+                        contact_resp = self.session.get(results['contact_page'], timeout=10)
+                        if contact_resp.status_code == 200:
+                            contact_soup = BeautifulSoup(contact_resp.text, 'html.parser')
+                            contact_text = contact_soup.get_text(separator=' ', strip=True)
+                            contact_contacts = self.extract_contact_patterns(contact_text)
+                            for email in contact_contacts['emails']:
+                                if email not in results['emails']:
+                                    results['emails'].append(email)
+                            for phone in contact_contacts['phones']:
+                                if phone not in results['phones']:
+                                    results['phones'].append(phone)
+                    except:
+                        pass
             else:
                 results['error'] = f'HTTP {response.status_code}'
                 
@@ -785,7 +1109,7 @@ class MultiPlatformAnalyzer:
         if platform == 'youtube':
             profile_data = self.analyze_youtube_selenium(url, username)
         elif platform == 'instagram':
-            profile_data = {'error': 'Instagram analysis requires authentication'}
+            profile_data = self.analyze_instagram_selenium(url, username)
         elif platform == 'facebook':
             profile_data = self.analyze_facebook_selenium(url, username)
         elif platform == 'linkedin':
@@ -806,42 +1130,22 @@ class MultiPlatformAnalyzer:
         self.selenium.close()
         return self.results
 
+
 # ============== MAIN UI ==============
+
 st.markdown('<p class="main-header">🔍 Multi-Platform Profile Analyzer</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">LinkedIn • Instagram • Facebook • YouTube • Company Websites<br>Dynamic Content Support • Only Public Data</p>', unsafe_allow_html=True)
 
-# ChromeDriver fix instructions
-if not SELENIUM_AVAILABLE:
-    st.markdown(f"""
-        <div class="error-box">
-            ⚠️ <b>Selenium/ChromeDriver Error:</b> {SELENIUM_ERROR or "ChromeDriver not available"}
-        </div>
-        <div class="chrome-fix-box">
-            <h4>🔧 How to Fix ChromeDriver Issues:</h4>
-            <ol>
-                <li><b>Install Google Chrome</b> - Download from <a href="https://www.google.com/chrome/" target="_blank">google.com/chrome</a></li>
-                <li><b>Install required packages:</b><br>
-                <code>pip install selenium webdriver-manager</code></li>
-                <li><b>If Chrome is installed, try:</b>
-                    <ul>
-                        <li>Restart your computer</li>
-                        <li>Run: <code>pip install --upgrade selenium webdriver-manager</code></li>
-                        <li>On Linux: <code>sudo apt-get install chromium-browser</code></li>
-                    </ul>
-                </li>
-                <li><b>Alternative - Manual ChromeDriver download:</b>
-                    <ul>
-                        <li>Download from <a href="https://chromedriver.chromium.org/" target="_blank">chromedriver.chromium.org</a></li>
-                        <li>Add to PATH or place in project directory</li>
-                    </ul>
-                </li>
-            </ol>
+if SELENIUM_AVAILABLE:
+    st.markdown("""
+        <div class="success-box">
+            ✅ <b>Selenium Ready:</b> Real browser automation active for all platforms.
         </div>
     """, unsafe_allow_html=True)
 else:
     st.markdown("""
-        <div class="success-box">
-            ✅ <b>Selenium Ready:</b> Real browser automation active for all platforms.
+        <div class="warning-box">
+            ⚠️ <b>Selenium Not Found:</b> Install with `pip install selenium webdriver-manager`
         </div>
     """, unsafe_allow_html=True)
 
@@ -869,7 +1173,9 @@ with st.expander("📋 Example URLs"):
     examples = {
         "YouTube (Dynamic)": "https://youtube.com/@NASA",
         "Facebook (With Address)": "https://facebook.com/VNSGUNIVERSITY",
-        "Company Website": "https://www.spacex.com"
+        "Instagram": "https://instagram.com/nasa",
+        "LinkedIn (Limited)": "https://linkedin.com/in/nirbhay-bhuva-749715171",
+        "Company": "https://www.spacex.com"
     }
     for name, url in examples.items():
         st.code(f"{name}: {url}", language=None)
@@ -878,135 +1184,132 @@ if analyze_button and profile_url:
     if not profile_url.startswith(('http://', 'https://')):
         st.error("❌ Please enter a valid URL starting with http:// or https://")
     else:
-        if not SELENIUM_AVAILABLE:
-            st.error("❌ Selenium is not available. Please fix ChromeDriver issues first.")
-        else:
-            with st.spinner("🔍 Analyzing... Opening real browser. YouTube needs 15-25 seconds for dynamic content..."):
-                analyzer = MultiPlatformAnalyzer()
-                results = analyzer.analyze_profile(profile_url)
-            
-            st.markdown("---")
-            
-            platform = results.get('platform', 'unknown')
-            platform_colors = {
-                'linkedin': '#0077b5',
-                'instagram': '#e4405f',
-                'facebook': '#1877f2',
-                'youtube': '#ff0000',
-                'company_website': '#6c757d',
-                'unknown': '#dc3545'
-            }
-            
-            plat_color = platform_colors.get(str(platform).lower(), '#6c757d')
-            
+        with st.spinner("🔍 Analyzing... Opening real browser. YouTube needs 15-25 seconds for dynamic content..."):
+            analyzer = MultiPlatformAnalyzer()
+            results = analyzer.analyze_profile(profile_url)
+        
+        st.markdown("---")
+        
+        platform = results.get('platform', 'unknown')
+        platform_colors = {
+            'linkedin': '#0077b5',
+            'instagram': '#e4405f',
+            'facebook': '#1877f2',
+            'youtube': '#ff0000',
+            'company_website': '#6c757d',
+            'unknown': '#dc3545'
+        }
+        
+        plat_color = platform_colors.get(str(platform).lower(), '#6c757d')
+        
+        st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                <div class="badge" style="background-color: {plat_color}; min-width: 150px;">
+                    {str(platform).upper()}
+                </div>
+                <div style="font-size: 1.2rem; color: #666;">
+                    @{results.get('username', 'unknown')}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        profile_data = results.get('profile_data', {})
+        
+        if 'error' in profile_data and profile_data['error']:
             st.markdown(f"""
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
-                    <div class="badge" style="background-color: {plat_color}; min-width: 150px;">
-                        {str(platform).upper()}
-                    </div>
-                    <div style="font-size: 1.2rem; color: #666;">
-                        @{results.get('username', 'unknown')}
-                    </div>
+                <div class="error-box">
+                    ⚠️ {profile_data['error']}
                 </div>
             """, unsafe_allow_html=True)
-            
-            profile_data = results.get('profile_data', {})
-            
-            if 'error' in profile_data and profile_data['error']:
+        
+        # Display based on platform
+        if platform == 'youtube':
+            display_youtube(profile_data)
+        elif platform == 'linkedin':
+            display_linkedin(profile_data)
+        elif platform == 'facebook':
+            display_facebook(profile_data)
+        elif platform == 'instagram':
+            display_instagram(profile_data)
+        elif platform == 'company_website':
+            display_company(profile_data)
+        
+        # Contact Summary
+        st.markdown("---")
+        st.subheader("📧 Contact Information Found")
+        
+        contact_info = results.get('contact_info', {})
+        
+        addresses = contact_info.get('addresses', [])
+        if addresses:
+            if isinstance(addresses, str):
+                addresses = [addresses]
+            st.markdown("""
+                <div class="address-box">
+                    <h4>📍 Address Found</h4>
+                    <p style="font-size: 1.1rem; line-height: 1.6;">
+                        {}
+                    </p>
+                </div>
+            """.format(addresses[0].replace(', ', '<br>')), unsafe_allow_html=True)
+        
+        col_email, col_phone, col_web = st.columns(3)
+        
+        with col_email:
+            emails = contact_info.get('emails', [])
+            if emails:
+                if isinstance(emails, str):
+                    emails = [emails]
                 st.markdown(f"""
-                    <div class="error-box">
-                        ⚠️ {profile_data['error']}
+                    <div class="metric-box">
+                        <h3>✉️</h3>
+                        <p><b>{len(emails)}</b> Email(s)</p>
+                        <p style="font-size: 0.8rem;">{emails[0]}</p>
                     </div>
                 """, unsafe_allow_html=True)
-            
-            # Display based on platform
-            if platform == 'youtube':
-                display_youtube(profile_data)
-            elif platform == 'linkedin':
-                display_linkedin(profile_data)
-            elif platform == 'facebook':
-                display_facebook(profile_data)
-            elif platform == 'instagram':
-                st.info("Instagram scraping is limited. Please use the official API.")
-            elif platform == 'company_website':
-                display_company(profile_data)
-            
-            # Contact Summary
-            st.markdown("---")
-            st.subheader("📧 Contact Information Found")
-            
-            contact_info = results.get('contact_info', {})
-            
-            addresses = contact_info.get('addresses', [])
-            if addresses:
-                if isinstance(addresses, str):
-                    addresses = [addresses]
+            else:
+                st.info("No email found")
+        
+        with col_phone:
+            phones = contact_info.get('phones', [])
+            if phones:
+                if isinstance(phones, str):
+                    phones = [phones]
                 st.markdown(f"""
-                    <div class="address-box">
-                        <h4>📍 Address Found</h4>
-                        <p style="font-size: 1.1rem; line-height: 1.6;">
-                            {addresses[0].replace(', ', '<br>')}
-                        </p>
+                    <div class="metric-box">
+                        <h3>📞</h3>
+                        <p><b>{len(phones)}</b> Phone(s)</p>
+                        <p style="font-size: 0.8rem;">{phones[0]}</p>
                     </div>
                 """, unsafe_allow_html=True)
-            
-            col_email, col_phone, col_web = st.columns(3)
-            
-            with col_email:
-                emails = contact_info.get('emails', [])
-                if emails:
-                    if isinstance(emails, str):
-                        emails = [emails]
-                    st.markdown(f"""
-                        <div class="metric-box">
-                            <h3>✉️</h3>
-                            <p><b>{len(emails)}</b> Email(s)</p>
-                            <p style="font-size: 0.8rem;">{emails[0]}</p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("No email found")
-            
-            with col_phone:
-                phones = contact_info.get('phones', [])
-                if phones:
-                    if isinstance(phones, str):
-                        phones = [phones]
-                    st.markdown(f"""
-                        <div class="metric-box">
-                            <h3>📞</h3>
-                            <p><b>{len(phones)}</b> Phone(s)</p>
-                            <p style="font-size: 0.8rem;">{phones[0]}</p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("No phone found")
-            
-            with col_web:
-                websites = contact_info.get('websites', [])
-                if websites:
-                    if isinstance(websites, str):
-                        websites = [websites]
-                    st.markdown(f"""
-                        <div class="metric-box">
-                            <h3>🌐</h3>
-                            <p><b>{len(websites)}</b> Website(s)</p>
-                            <p style="font-size: 0.8rem;"><a href="{websites[0]}" target="_blank">Visit</a></p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("No website found")
-            
-            with st.expander("🔍 View All Contact Details"):
-                st.json(contact_info)
-            
-            with st.expander("🔧 View Raw Analysis Data"):
-                st.json(results)
+            else:
+                st.info("No phone found")
+        
+        with col_web:
+            websites = contact_info.get('websites', [])
+            if websites:
+                if isinstance(websites, str):
+                    websites = [websites]
+                st.markdown(f"""
+                    <div class="metric-box">
+                        <h3>🌐</h3>
+                        <p><b>{len(websites)}</b> Website(s)</p>
+                        <p style="font-size: 0.8rem;"><a href="{websites[0]}" target="_blank">Visit</a></p>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("No website found")
+        
+        with st.expander("🔍 View All Contact Details"):
+            st.json(contact_info)
+        
+        with st.expander("🔧 View Raw Analysis Data"):
+            st.json(results)
 
 st.markdown("""
     <div class="footer">
         🔒 Only analyzes publicly available information • Respects platform ToS<br>
-        <b>YouTube:</b> Selenium for dynamic content • <b>LinkedIn:</b> API required • <b>Facebook:</b> Selenium automation<br>
-        <b>Note:</b> First run downloads ChromeDriver automatically. If you see errors, install Chrome browser.
+        <b>YouTube:</b> Selenium for dynamic content • <b>LinkedIn:</b> API required • <b>Facebook/Instagram:</b> Selenium automation<br>
+        <b>Note:</b> First run downloads ChromeDriver automatically
     </div>
 """, unsafe_allow_html=True)
