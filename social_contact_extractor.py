@@ -6,8 +6,6 @@ from bs4 import BeautifulSoup
 import re
 import json
 import time
-import os
-import shutil
 from urllib.parse import urlparse, urljoin
 from datetime import datetime
 
@@ -59,79 +57,11 @@ st.markdown("""
 class SeleniumScraper:
     def __init__(self):
         self.driver = None
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _find_chrome_binary(self):
-        """Auto-detect Chrome or Chromium binary on the host system."""
-        candidates = [
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium",
-            "chromium-browser",
-        ]
-        for name in candidates:
-            found = shutil.which(name)
-            if found:
-                return found
-        # Absolute path fallbacks (common on Ubuntu / Streamlit Cloud)
-        abs_paths = [
-            "/usr/bin/chromium-browser",
-            "/usr/bin/chromium",
-            "/usr/bin/google-chrome",
-            "/usr/bin/google-chrome-stable",
-        ]
-        for p in abs_paths:
-            if os.path.isfile(p):
-                return p
-        return None
-
-    def _find_chromedriver(self):
-        """
-        Prefer the system chromedriver (version-matched to installed
-        Chromium) then fall back to webdriver-manager.
-        """
-        system = shutil.which("chromedriver")
-        if system:
-            return system
-        # Fall back to webdriver-manager download
-        return ChromeDriverManager().install()
-
-    def _requests_fallback(self, url):
-        """
-        Basic BeautifulSoup scrape via requests.
-        Returns a parsed soup or None. Only OG/meta tags are reliable
-        here — dynamic content won't be present.
-        """
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-        }
-        try:
-            r = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
-            if r.status_code == 200:
-                return BeautifulSoup(r.text, "html.parser")
-            return None
-        except Exception:
-            return None
-
-    # ------------------------------------------------------------------
-    # Driver init
-    # ------------------------------------------------------------------
-
+    
     def init_driver(self):
         if not SELENIUM_AVAILABLE:
             return None
-
+            
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
@@ -140,101 +70,79 @@ class SeleniumScraper:
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
-        options.add_argument(
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.0"
-        )
+        options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.0")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
-
-        # ---- KEY FIX: set binary location for Chrome/Chromium ----
-        chrome_bin = self._find_chrome_binary()
-        if chrome_bin:
-            options.binary_location = chrome_bin
-        else:
-            st.error(
-                "❌ Chrome/Chromium binary not found on this server.\n\n"
-                "**Fix:** Make sure `packages.txt` contains `chromium-browser` "
-                "and redeploy the app."
-            )
-            return None
-
+        options.add_experimental_option('useAutomationExtension', False)
+        
         try:
-            service = Service(self._find_chromedriver())
+            service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=options)
-            driver.execute_cdp_cmd(
-                "Page.addScriptToEvaluateOnNewDocument",
-                {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
-            )
+            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
+            })
             self.driver = driver
             return driver
         except Exception as e:
             st.error(f"❌ ChromeDriver failed: {str(e)}")
             return None
-
-    # ------------------------------------------------------------------
-    # Page loading methods
-    # ------------------------------------------------------------------
-
+    
     def get_page(self, url, wait_time=10):
         if not self.driver:
             self.init_driver()
         if not self.driver:
-            st.info("ℹ️ Selenium unavailable — using requests fallback (OG/meta tags only).")
-            return self._requests_fallback(url)
-
+            return None
+            
         try:
             self.driver.get(url)
             time.sleep(5)
+            
             WebDriverWait(self.driver, wait_time).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             time.sleep(3)
-            return BeautifulSoup(self.driver.page_source, "html.parser")
+            
+            return BeautifulSoup(self.driver.page_source, 'html.parser')
         except TimeoutException:
             try:
-                return BeautifulSoup(self.driver.page_source, "html.parser")
-            except Exception:
-                return self._requests_fallback(url)
+                return BeautifulSoup(self.driver.page_source, 'html.parser')
+            except:
+                return None
         except Exception as e:
-            st.warning(f"⚠️ Selenium error ({e}). Trying requests fallback…")
-            return self._requests_fallback(url)
-
+            st.error(f"❌ Error: {str(e)}")
+            return None
+    
     def get_youtube_data(self, url):
         """Special method for YouTube with dynamic content waiting."""
         if not self.driver:
             self.init_driver()
         if not self.driver:
-            st.info("ℹ️ Selenium unavailable — YouTube subscriber/video counts may be missing.")
-            return self._requests_fallback(url)
-
+            return None
+            
         try:
             self.driver.get(url)
             # Wait longer for YouTube dynamic content
             time.sleep(8)
+            
+            # Try to find subscriber count element
             try:
                 WebDriverWait(self.driver, 15).until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "#subscriber-count, yt-formatted-string#subscriber-count, .yt-formatted-string")
-                    )
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "#subscriber-count, yt-formatted-string#subscriber-count, .yt-formatted-string"))
                 )
-            except Exception:
+            except:
                 pass
+            
             time.sleep(3)
-            return BeautifulSoup(self.driver.page_source, "html.parser")
+            return BeautifulSoup(self.driver.page_source, 'html.parser')
         except Exception as e:
-            st.warning(f"⚠️ YouTube Selenium error: {e}")
+            st.error(f"❌ YouTube loading error: {str(e)}")
             try:
-                return BeautifulSoup(self.driver.page_source, "html.parser")
-            except Exception:
-                return self._requests_fallback(url)
-
+                return BeautifulSoup(self.driver.page_source, 'html.parser')
+            except:
+                return None
+    
     def close(self):
         if self.driver:
-            try:
-                self.driver.quit()
-            except Exception:
-                pass
+            self.driver.quit()
             self.driver = None
 
 
@@ -588,7 +496,7 @@ class MultiPlatformAnalyzer:
             soup = self.selenium.get_youtube_data(url)
             
             if not soup:
-                results['error'] = 'Failed to load YouTube page'
+                results['error'] = 'Selenium failed to load YouTube page'
                 return results
             
             # Method 1: Try to find ytInitialData (YouTube's initial data)
@@ -624,9 +532,9 @@ class MultiPlatformAnalyzer:
             
             # YouTube subscriber patterns (from rendered page)
             subscriber_patterns = [
-                r'([\d,.]+[KMBkmb]?)\s*subscribers?',
-                r'subscribers?\s*[:·]\s*([\d,.]+[KMBkmb]?)',
-                r'([\d,]+(?:\.\d+)?)\s*subscribers?',
+                r'([\d,.]+[KMBkmb]?)\s*subscribers?',  # 15M subscribers, 6.1K subscribers
+                r'subscribers?\s*[:·]\s*([\d,.]+[KMBkmb]?)',  # subscribers: 15M
+                r'([\d,]+(?:\.\d+)?)\s*subscribers?',  # 15,000,000 subscribers
             ]
             
             for pattern in subscriber_patterns:
@@ -637,7 +545,7 @@ class MultiPlatformAnalyzer:
             
             # Video count patterns
             video_patterns = [
-                r'([\d,.]+[KMBkmb]?)\s*videos?',
+                r'([\d,.]+[KMBkmb]?)\s*videos?',  # 6.1K videos
                 r'videos?\s*[:·]\s*([\d,.]+[KMBkmb]?)',
                 r'([\d,]+(?:\.\d+)?)\s*videos?',
             ]
@@ -648,9 +556,10 @@ class MultiPlatformAnalyzer:
                     results['video_count'] = match.group(1).strip()
                     break
             
-            # View count
+            # View count (total channel views - harder to find)
+            # Usually in about page, not main page
             view_patterns = [
-                r'([\d,.]+[KMBkmb]?)\s*views?',
+                r'([\d,.]+[KMBkmb]?)\s*views?',  # May appear in about section
                 r'total\s*views?\s*[:·]\s*([\d,.]+[KMBkmb]?)',
             ]
             
@@ -663,28 +572,33 @@ class MultiPlatformAnalyzer:
             # Try to extract from ytInitialData if available
             if yt_data:
                 try:
+                    # Navigate through YouTube's complex JSON structure
                     header = yt_data.get('header', {})
                     c4_tabbed_header = header.get('c4TabbedHeaderRenderer', {})
                     
+                    # Subscriber count from header
                     subscriber_text = c4_tabbed_header.get('subscriberCountText', {}).get('simpleText', '')
                     if subscriber_text:
                         sub_match = re.search(r'([\d,.]+[KMBkmb]?)', subscriber_text)
                         if sub_match:
                             results['subscribers'] = sub_match.group(1)
                     
+                    # Channel name
                     title = c4_tabbed_header.get('title', '')
                     if title:
                         results['channel_name'] = title
                     
+                    # Banner images
                     banners = c4_tabbed_header.get('banner', {}).get('thumbnails', [])
                     if banners:
                         results['banner_image'] = banners[-1].get('url')
                     
+                    # Avatar
                     avatars = c4_tabbed_header.get('avatar', {}).get('thumbnails', [])
                     if avatars:
                         results['profile_image'] = avatars[-1].get('url')
                     
-                except Exception:
+                except Exception as e:
                     pass
             
             # Extract links from description
@@ -692,11 +606,14 @@ class MultiPlatformAnalyzer:
                 links = re.findall(r'https?://[^\s<>\"{}|\\^`\[\]]+', results['description'])
                 results['links'] = list(set(links))
                 
+                # Email from description
                 contacts = self.extract_contact_patterns(results['description'])
                 results['public_email'] = contacts['emails'][0] if contacts['emails'] else None
             
-            # Fallback subscriber search in text nodes
+            # If still no subscribers, try to find in specific elements
             if not results['subscribers']:
+                # Look for text that contains numbers followed by K, M, B
+                # and near "subscriber" word
                 sub_texts = soup.find_all(text=re.compile(r'[\d,.]+[KMBkmb]?\s*subscribers?', re.IGNORECASE))
                 for text in sub_texts:
                     match = re.search(r'([\d,.]+[KMBkmb]?)', str(text))
@@ -704,6 +621,7 @@ class MultiPlatformAnalyzer:
                         results['subscribers'] = match.group(1)
                         break
             
+            # If still no video count
             if not results['video_count']:
                 vid_texts = soup.find_all(text=re.compile(r'[\d,.]+[KMBkmb]?\s*videos?', re.IGNORECASE))
                 for text in vid_texts:
@@ -712,7 +630,9 @@ class MultiPlatformAnalyzer:
                         results['video_count'] = match.group(1)
                         break
             
+            # Handle extraction
             if not results['handle'] and results['channel_name']:
+                # Try to get from URL or meta
                 handle_match = re.search(r'@(\w+)', url)
                 if handle_match:
                     results['handle'] = handle_match.group(1)
@@ -745,7 +665,7 @@ class MultiPlatformAnalyzer:
             soup = self.selenium.get_page(url, wait_time=15)
             
             if not soup:
-                results['error'] = 'Failed to load page'
+                results['error'] = 'Selenium failed to load page'
                 return results
             
             meta_title = soup.find('meta', property='og:title')
@@ -827,7 +747,7 @@ class MultiPlatformAnalyzer:
             soup = self.selenium.get_page(url, wait_time=15)
             
             if not soup:
-                results['error'] = 'Failed to load page'
+                results['error'] = 'Selenium failed to load page'
                 return results
             
             meta_title = soup.find('meta', property='og:title')
@@ -854,6 +774,7 @@ class MultiPlatformAnalyzer:
             results['email'] = results['public_email']
             results['phone'] = results['public_phone']
             
+            # Followers extraction
             follower_patterns = [
                 r'([\d,]+(?:\.\d+)?[KMBkmb]?)\s*followers?',
                 r'followers?\s*[:·]\s*([\d,]+(?:\.\d+)?[KMBkmb]?)',
@@ -867,6 +788,7 @@ class MultiPlatformAnalyzer:
                     results['followers'] = match.group(1).strip()
                     break
             
+            # Following
             following_patterns = [
                 r'([\d,]+(?:\.\d+)?[KMBkmb]?)\s*following',
                 r'following\s*[:·]\s*([\d,]+(?:\.\d+)?[KMBkmb]?)',
@@ -887,6 +809,7 @@ class MultiPlatformAnalyzer:
                         results['followers'] = match.group(1).strip()
                         break
             
+            # Address
             address_patterns = [
                 r'(Post\s+Box\s+No\s*\d+[^.]{10,150})',
                 r'(\d+[^,]{5,50}(?:Road|Street|Avenue|Marg)[^,]{5,100}(?:,\s*[A-Za-z\s]+){1,4})',
@@ -904,6 +827,7 @@ class MultiPlatformAnalyzer:
                         results['address'] = candidate
                         break
             
+            # Website
             for link in soup.find_all('a', href=True):
                 href = link['href']
                 if 'l.php' in href and 'u=' in href:
@@ -913,6 +837,7 @@ class MultiPlatformAnalyzer:
                         results['website'] = parsed['u'][0]
                         break
             
+            # Hours
             hours_match = re.search(r'(?:Hours|Open)[:\s]*([^.]{10,100})', clean_text, re.IGNORECASE)
             if hours_match:
                 results['hours'] = hours_match.group(1).strip()
@@ -945,7 +870,7 @@ class MultiPlatformAnalyzer:
             soup = self.selenium.get_page(url, wait_time=15)
             
             if not soup:
-                results['error'] = 'Failed to load page'
+                results['error'] = 'Selenium failed to load page'
                 return results
             
             page_title = soup.find('title')
