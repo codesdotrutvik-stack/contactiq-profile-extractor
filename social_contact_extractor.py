@@ -59,56 +59,32 @@ class SeleniumScraper:
         self.driver = None
     
     def init_driver(self):
-    if not SELENIUM_AVAILABLE:
-        return None
-    
-    import shutil
-    import platform
-    import os
-    
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    # ========== WINDOWS PATHS ==========
-    chrome_paths = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        r"C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe".format(os.getlogin()),
-    ]
-    
-    chrome_binary = None
-    for path in chrome_paths:
-        if os.path.exists(path):
-            chrome_binary = path
-            break
-    
-    if chrome_binary:
-        options.binary_location = chrome_binary
-        st.success(f"✅ Chrome found: {chrome_binary}")
-    else:
-        st.error("❌ Chrome NOT found! Install from: https://www.google.com/chrome/")
-        return None
-    
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-            'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
-        })
-        self.driver = driver
-        return driver
-    except Exception as e:
-        st.error(f"❌ ChromeDriver failed: {str(e)}")
-        return None
+        if not SELENIUM_AVAILABLE:
+            return None
+            
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.0")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        try:
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
+            })
+            self.driver = driver
+            return driver
+        except Exception as e:
+            st.error(f"❌ ChromeDriver failed: {str(e)}")
+            return None
     
     def get_page(self, url, wait_time=10):
         if not self.driver:
