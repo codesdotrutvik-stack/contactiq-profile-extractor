@@ -1,354 +1,863 @@
-from playwright.sync_api import sync_playwright
-import time
+import streamlit as st
+import requests
+from bs4 import BeautifulSoup
 import re
 import json
+from datetime import datetime
+from duckduckgo_search import DDGS
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import time
 
-class SocialMediaScraper:
-    def __init__(self, headless=False):
-        """
-        headless=False એટલે બ્રાઉઝર ખુલ્લું દેખાશે
-        headless=True એટલે બેકગ્રાઉન્ડમાં ચાલશે (ઝડપી)
-        """
-        self.headless = headless
-        self.browser = None
-        self.page = None
-        self.playwright = None
-    
-    def start(self):
-        """બ્રાઉઝર શરૂ કરો"""
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(
-            headless=self.headless,
-            args=['--disable-blink-features=AutomationControlled']
-        )
-        self.page = self.browser.new_page(
-            viewport={'width': 1280, 'height': 800}
-        )
-        # વેબસાઇટને ઓળખાવા માટે User-Agent સેટ કરો
-        self.page.set_extra_http_headers({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
-        return self.page
-    
-    def close(self):
-        """બ્રાઉઝર બંધ કરો"""
-        if self.browser:
-            self.browser.close()
-        if self.playwright:
-            self.playwright.stop()
-    
-    def wait_for_element(self, selector, timeout=10000):
-        """એલિમેન્ટ લોડ થાય ત્યાં સુધી રાહ જુઓ"""
-        try:
-            self.page.wait_for_selector(selector, timeout=timeout)
-            return True
-        except:
-            return False
-    
-    # ==================== INSTAGRAM ====================
-    def scrape_instagram(self, username):
-        """Instagram પ્રોફાઇલમાંથી ડેટા ફેચ કરો"""
-        data = {
-            'platform': 'Instagram',
-            'username': username,
-            'full_name': 'N/A',
-            'bio': 'N/A',
-            'followers': 'N/A',
-            'following': 'N/A',
-            'posts': 'N/A',
-            'business': 'N/A',
-            'external_url': 'N/A',
-            'is_private': False,
-            'error': None
-        }
-        
-        try:
-            print(f"\n🔍 Instagram પ્રોફાઇલ સ્ક્રેપ કરી રહ્યા છીએ: @{username}")
-            url = f"https://www.instagram.com/{username}/"
-            self.page.goto(url, wait_until='networkidle')
-            time.sleep(3)
-            
-            # ચેક કરો કે પ્રોફાઇલ પ્રાઇવેટ છે કે નહીં
-            if self.page.query_selector("text=This Account is Private"):
-                data['is_private'] = True
-                data['error'] = "આ એકાઉન્ટ પ્રાઇવેટ છે"
-                return data
-            
-            # પૂરું નામ
-            fullname_selector = "h1._ap3a, h2._ap3a"
-            if self.wait_for_element(fullname_selector, 5000):
-                data['full_name'] = self.page.query_selector(fullname_selector).inner_text().strip()
-            
-            # બાયો - મોટા ભાગના Instagram selectors
-            bio_selectors = [
-                "div._ap3a div._aacl._aaco._aacu._aacx._aad7._aade",
-                "div._aacl._aaco._aacu._aacx._aad7._aade",
-                "section h2 + div span"
-            ]
-            for selector in bio_selectors:
-                elem = self.page.query_selector(selector)
-                if elem:
-                    data['bio'] = elem.inner_text().strip()
-                    break
-            
-            # આંકડા (posts, followers, following)
-            stats_selector = "li._acap span._ac2a, section ul li span"
-            stats_elements = self.page.query_selector_all(stats_selector)
-            stats_texts = [elem.inner_text().strip() for elem in stats_elements if elem.inner_text().strip()]
-            
-            if len(stats_texts) >= 3:
-                data['posts'] = stats_texts[0]
-                data['followers'] = stats_texts[1]
-                data['following'] = stats_texts[2]
-            
-            # બાહ્ય URL
-            ext_url_selector = "a._ac6s, a._ap30"
-            ext_url_elem = self.page.query_selector(ext_url_selector)
-            if ext_url_elem:
-                data['external_url'] = ext_url_elem.get_attribute('href')
-            
-            # શું વ્યવસાયિક એકાઉન્ટ છે?
-            if self.page.query_selector("span:has-text('Business'), span:has-text('Creator')"):
-                data['business'] = 'Yes'
-            else:
-                data['business'] = 'No'
-            
-            # પ્રોફાઇલ પિક્ચર URL
-            img_elem = self.page.query_selector("img._aad0")
-            if img_elem:
-                data['profile_pic'] = img_elem.get_attribute('src')
-            
-            print(f"✅ Instagram ડેટા મળ્યો!")
-            
-        except Exception as e:
-            data['error'] = str(e)
-            print(f"❌ Instagram ભૂલ: {e}")
-        
-        return data
-    
-    # ==================== YOUTUBE ====================
-    def scrape_youtube(self, channel_id):
-        """YouTube ચેનલમાંથી ડેટા ફેચ કરો"""
-        data = {
-            'platform': 'YouTube',
-            'channel_id': channel_id,
-            'channel_name': 'N/A',
-            'subscribers': 'N/A',
-            'videos': 'N/A',
-            'description': 'N/A',
-            'joined_date': 'N/A',
-            'country': 'N/A',
-            'error': None
-        }
-        
-        try:
-            print(f"\n🔍 YouTube ચેનલ સ્ક્રેપ કરી રહ્યા છીએ: @{channel_id}")
-            url = f"https://www.youtube.com/@{channel_id}"
-            self.page.goto(url, wait_until='networkidle')
-            time.sleep(3)
-            
-            # ચેનલનું નામ
-            name_selector = "ytd-channel-name #text"
-            if self.wait_for_element(name_selector, 5000):
-                data['channel_name'] = self.page.query_selector(name_selector).inner_text().strip()
-            
-            # સબ્સ્ક્રાઇબર્સ
-            subs_selector = "#subscriber-count"
-            if self.wait_for_element(subs_selector, 3000):
-                data['subscribers'] = self.page.query_selector(subs_selector).inner_text().strip()
-            
-            # વિડિઓસની સંખ્યા
-            videos_selector = "ytd-channel-stats #text"
-            video_elems = self.page.query_selector_all(videos_selector)
-            if len(video_elems) >= 2:
-                data['videos'] = video_elems[1].inner_text().strip()
-            
-            # ચેનલ વર્ણન
-            desc_selector = "#description-text"
-            if self.wait_for_element(desc_selector, 3000):
-                data['description'] = self.page.query_selector(desc_selector).inner_text().strip()
-            
-            # ક્યારે જોઈન કર્યું
-            date_selector = "#right-column #owner #info #date"
-            if self.wait_for_element(date_selector, 3000):
-                data['joined_date'] = self.page.query_selector(date_selector).inner_text().strip()
-            
-            # દેશ
-            country_selector = "#right-column #owner #info #country"
-            if self.wait_for_element(country_selector, 3000):
-                data['country'] = self.page.query_selector(country_selector).inner_text().strip()
-            
-            print(f"✅ YouTube ડેટા મળ્યો!")
-            
-        except Exception as e:
-            data['error'] = str(e)
-            print(f"❌ YouTube ભૂલ: {e}")
-        
-        return data
-    
-    # ==================== FACEBOOK ====================
-    def scrape_facebook(self, username):
-        """Facebook પ્રોફાઇલમાંથી ડેટા ફેચ કરો"""
-        data = {
-            'platform': 'Facebook',
-            'username': username,
-            'full_name': 'N/A',
-            'bio': 'N/A',
-            'followers': 'N/A',
-            'likes': 'N/A',
-            'about': 'N/A',
-            'education': 'N/A',
-            'work': 'N/A',
-            'location': 'N/A',
-            'error': None
-        }
-        
-        try:
-            print(f"\n🔍 Facebook પ્રોફાઇલ સ્ક્રેપ કરી રહ્યા છીએ: @{username}")
-            url = f"https://www.facebook.com/{username}"
-            self.page.goto(url, wait_until='networkidle')
-            time.sleep(5)
-            
-            # Facebook લોગિન પેજ આવે તો
-            if self.page.query_selector("input[name='email']"):
-                print("⚠️ Facebook લોગિન જરૂરી છે. કૃપા કરીને મેન્યુઅલી લોગિન કરો.")
-                print("ℹ️ આપણે આગળ વધતા પહેલા 30 સેકન્ડ રાહ જોશું...")
-                time.sleep(30)
-            
-            # પૂરું નામ
-            name_selectors = [
-                "h1",
-                "span.x1lliihq",
-                "div.x1iorvi4 span"
-            ]
-            for selector in name_selectors:
-                elem = self.page.query_selector(selector)
-                if elem and elem.inner_text().strip():
-                    data['full_name'] = elem.inner_text().strip()
-                    break
-            
-            # About/Bio
-            bio_selector = "div[data-testid='profile_bio_text'], div.x1iyjqo2 span"
-            if self.wait_for_element(bio_selector, 3000):
-                data['bio'] = self.page.query_selector(bio_selector).inner_text().strip()
-            
-            # Followers
-            followers_selector = "span.x1yk3o3k:has-text('followers'), div[role='tooltip']"
-            followers_elem = self.page.query_selector(followers_selector)
-            if followers_elem:
-                data['followers'] = followers_elem.inner_text().strip()
-            
-            # Location
-            location_selectors = [
-                "span:has-text('Lives in')",
-                "span:has-text('From')",
-                "div.x1iyjqo2 span"
-            ]
-            for selector in location_selectors:
-                elem = self.page.query_selector(selector)
-                if elem:
-                    text = elem.inner_text().strip()
-                    if 'Lives in' in text or 'From' in text:
-                        data['location'] = text
-                        break
-            
-            # Work/Education - Facebook પર 'About' સેક્શનમાંથી
-            about_selector = "div[data-testid='profile_details'] div"
-            if self.wait_for_element(about_selector, 3000):
-                about_text = self.page.query_selector(about_selector).inner_text().strip()
-                data['about'] = about_text
-                
-                # Work શોધો
-                if 'Work' in about_text or 'works at' in about_text.lower():
-                    work_match = re.search(r'Work(.*?)(?=Education|College|$)', about_text, re.DOTALL)
-                    if work_match:
-                        data['work'] = work_match.group(1).strip()
-                
-                # Education શોધો
-                if 'Education' in about_text or 'studied at' in about_text.lower():
-                    edu_match = re.search(r'Education(.*?)(?=Work|College|$)', about_text, re.DOTALL)
-                    if edu_match:
-                        data['education'] = edu_match.group(1).strip()
-            
-            print(f"✅ Facebook ડેટા મળ્યો!")
-            
-        except Exception as e:
-            data['error'] = str(e)
-            print(f"❌ Facebook ભૂલ: {e}")
-        
-        return data
-    
-    # ==================== SCREENSHOT ====================
-    def take_screenshot(self, filename="screenshot.png"):
-        """સ્ક્રીનશોટ લો"""
-        try:
-            self.page.screenshot(path=filename, full_page=True)
-            print(f"📸 Screenshot સેવ થયો: {filename}")
-            return True
-        except Exception as e:
-            print(f"❌ Screenshot ભૂલ: {e}")
-            return False
+# ── MISTRAL API KEY ────────────────────────────────────────────
+MISTRAL_KEY = "tXPmUYPeEqwD48MrvREFmn3GmvB7KqRk"
 
+# ── PAGE CONFIG ────────────────────────────────────────────────
+st.set_page_config(
+    page_title="ContactIQ — Profile Extractor",
+    page_icon="🔍",
+    layout="centered"
+)
 
-# ==================== MAIN FUNCTION ====================
-def main():
-    """મુખ્ય ફંક્શન - ત્રણેય પ્લેટફોર્મ સ્ક્રેપ કરો"""
-    
-    scraper = SocialMediaScraper(headless=False)  # False = બ્રાઉઝર ખુલ્લું દેખાશે
-    scraper.start()
-    
-    all_data = {}
-    
+st.markdown("""
+<div style="text-align: center; padding: 1.5rem 0;">
+    <h1 style="font-size: 2.8rem; margin: 0; background: linear-gradient(135deg, #0EA5E9, #6366F1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        🔍 ContactIQ
+    </h1>
+    <p style="color: #666; font-size: 1.1rem;">Extract public data from Social Media profiles</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── MODE TOGGLE ─────────────────────────────────────────────────
+mode = st.radio(
+    "Select Mode:",
+    ["🐙 GitHub Profile", "🏢 Company Profile", "📘 Facebook Profile", "📸 Instagram Profile", "💼 LinkedIn Profile"],
+    horizontal=True,
+    index=0
+)
+
+st.markdown("---")
+
+# ── INPUT ──────────────────────────────────────────────────────
+if mode == "🐙 GitHub Profile":
+    username = st.text_input("GitHub Username", placeholder="octocat", label_visibility="collapsed")
+elif mode == "🏢 Company Profile":
+    company_name = st.text_input("Company Name", placeholder="Google", label_visibility="collapsed")
+elif mode == "📘 Facebook Profile":
+    fb_username = st.text_input("Facebook Username/Page URL", placeholder="zuck or facebook.com/zuck", label_visibility="collapsed")
+elif mode == "📸 Instagram Profile":
+    ig_username = st.text_input("Instagram Username", placeholder="instagram", label_visibility="collapsed")
+elif mode == "💼 LinkedIn Profile":
+    li_url = st.text_input("LinkedIn Profile URL", placeholder="linkedin.com/in/username", label_visibility="collapsed")
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    extract_btn = st.button("🔍 Extract Data", use_container_width=True)
+
+# ════════════════════════════════════════════════════════════════
+# ── SELENIUM SETUP ─────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+
+def get_selenium_driver():
+    """Setup headless Chrome driver"""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0")
+
     try:
-        # 1. Instagram
-        insta_username = input("\n📸 Instagram યુઝરનામ દાખલ કરો (દા.ત. cristiano): ").strip()
-        if insta_username:
-            insta_data = scraper.scrape_instagram(insta_username)
-            all_data['instagram'] = insta_data
-        
-        # 2. YouTube
-        yt_channel = input("\n🎥 YouTube ચેનલ ID દાખલ કરો (દા.ત. MrBeast): ").strip()
-        if yt_channel:
-            yt_data = scraper.scrape_youtube(yt_channel)
-            all_data['youtube'] = yt_data
-        
-        # 3. Facebook
-        fb_username = input("\n📘 Facebook યુઝરનામ દાખલ કરો (દા.ત. zuck): ").strip()
-        if fb_username:
-            fb_data = scraper.scrape_facebook(fb_username)
-            all_data['facebook'] = fb_data
-        
-        # 📊 બધો ડેટા શો કરો
-        print("\n" + "="*60)
-        print("📊  સ્ક્રેપિંગ રિઝલ્ટ્સ")
-        print("="*60)
-        
-        for platform, data in all_data.items():
-            if data and not data.get('error'):
-                print(f"\n🔹 {platform.upper()}")
-                print("-"*40)
-                for key, value in data.items():
-                    if key not in ['platform', 'error'] and value not in ['N/A', None]:
-                        print(f"   {key.replace('_', ' ').title()}: {value}")
-            elif data and data.get('error'):
-                print(f"\n🔹 {platform.upper()}: ❌ {data['error']}")
-        
-        # 💾 JSON માં સેવ કરો
-        with open('profile_data.json', 'w', encoding='utf-8') as f:
-            json.dump(all_data, f, indent=4, ensure_ascii=False)
-        print("\n💾 ડેટા 'profile_data.json' માં સેવ થયો")
-        
-        # 📸 Screenshot લો
-        scraper.take_screenshot("profile_screenshot.png")
-        
-    except KeyboardInterrupt:
-        print("\n⏹️ પ્રોગ્રામ બંધ કરવામાં આવ્યો")
+        driver = webdriver.Chrome(options=chrome_options)
+        return driver
     except Exception as e:
-        print(f"❌ મુખ્ય ભૂલ: {e}")
+        st.error(f"Chrome Driver Error: {str(e)}")
+        return None
+
+# ════════════════════════════════════════════════════════════════
+# ── GITHUB EXTRACTION ──────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+
+def get_github_profile(username):
+    try:
+        url = f"https://api.github.com/users/{username}"
+        headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'ContactIQ'}
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'status': 'success',
+                'name': data.get('name') or data.get('login', 'Not found'),
+                'username': data.get('login', 'Not found'),
+                'email': data.get('email') or 'Not public',
+                'location': data.get('location') or 'Not found',
+                'company': data.get('company') or 'Not found',
+                'bio': data.get('bio') or 'Not found',
+                'blog': data.get('blog') or 'Not found',
+                'twitter': data.get('twitter_username') or 'Not found',
+                'public_repos': data.get('public_repos', 0),
+                'followers': data.get('followers', 0),
+                'following': data.get('following', 0),
+                'profile_url': data.get('html_url', ''),
+                'avatar_url': data.get('avatar_url', '')
+            }
+        elif response.status_code == 404:
+            return {'status': 'error', 'message': f"User '{username}' not found"}
+        else:
+            return {'status': 'error', 'message': f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+
+# ════════════════════════════════════════════════════════════════
+# ── COMPANY EXTRACTION (DuckDuckGo + Mistral AI) ─────────────
+# ════════════════════════════════════════════════════════════════
+
+def search_company_duckduckgo(company_name):
+    """Search company using DuckDuckGo"""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(f"{company_name} company contact phone email address", max_results=5))
+
+            info = {
+                'phone': None,
+                'email': None,
+                'website': None,
+                'address': None,
+                'description': None,
+                'body': ''
+            }
+
+            for result in results:
+                body = result.get('body', '')
+                info['body'] += body + ' '
+
+                # Phone
+                phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', body)
+                if phone_match and not info['phone']:
+                    info['phone'] = phone_match.group(1).strip()
+
+                # Email
+                email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', body)
+                if email_match and not info['email']:
+                    info['email'] = email_match.group(0).strip()
+
+                # Website
+                website_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', body)
+                if website_match and not info['website']:
+                    info['website'] = website_match.group(1).strip()
+
+                # Address
+                address_match = re.search(r'\d{1,5}\s[\w\s]{2,40}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd)[\w\s,\.]{0,60}', body, re.IGNORECASE)
+                if address_match and not info['address']:
+                    info['address'] = address_match.group(0).strip()
+
+                if not info['description']:
+                    info['description'] = result.get('title', '') + ' ' + body[:200]
+
+            return info
+    except Exception as e:
+        return None
+
+def call_mistral_company(company_name):
+    """Call Mistral AI for company details"""
+    try:
+        prompt = f"""
+        Provide information about this company: {company_name}
+
+        Return ONLY JSON:
+        {{
+            "founded": "year or Not found",
+            "founder": "name or Not found",
+            "ceo": "name or Not found",
+            "headquarters": "location or Not found",
+            "industry": "sector or Not found",
+            "employees": "number or Not found"
+        }}
+        """
+
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {MISTRAL_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "mistral-small-latest",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300,
+                "temperature": 0.1
+            },
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            raw = data['choices'][0]['message']['content']
+            match = re.search(r'\{[\s\S]*\}', raw)
+            if match:
+                return json.loads(match.group())
+        return None
+    except:
+        return None
+
+def get_company_info(company_name):
+    result = {
+        'name': company_name,
+        'founded': 'Not found',
+        'founder': 'Not found',
+        'ceo': 'Not found',
+        'headquarters': 'Not found',
+        'industry': 'Not found',
+        'employees': 'Not found',
+        'website': 'Not found',
+        'email': 'Not found',
+        'phone': 'Not found',
+        'address': 'Not found',
+        'description': 'Not found'
+    }
+
+    try:
+        # Step 1: DuckDuckGo Search
+        ddg_data = search_company_duckduckgo(company_name)
+        if ddg_data:
+            for key in ['phone', 'email', 'website', 'address', 'description']:
+                if ddg_data.get(key):
+                    result[key] = ddg_data[key]
+            if ddg_data.get('body'):
+                result['description'] = ddg_data['body'][:300]
+
+        # Step 2: Mistral AI
+        mistral_data = call_mistral_company(company_name)
+        if mistral_data:
+            for key in ['founded', 'founder', 'ceo', 'headquarters', 'industry', 'employees']:
+                if mistral_data.get(key) and mistral_data[key] != 'Not found':
+                    result[key] = mistral_data[key]
+
+        result['status'] = 'success'
+    except Exception as e:
+        result['status'] = 'error'
+        result['error'] = str(e)
+
+    return result
+
+# ════════════════════════════════════════════════════════════════
+# ── FACEBOOK EXTRACTION (Selenium) ─────────────────────────────
+# ════════════════════════════════════════════════════════════════
+
+def get_facebook_profile(username):
+    """Extract Facebook public page data using Selenium"""
+    driver = None
+    try:
+        # Clean username
+        username = username.strip().replace('@', '').split('/')[-1]
+        if 'facebook.com' in username:
+            username = username.split('facebook.com/')[-1].split('?')[0].split('/')[0]
+
+        url = f"https://www.facebook.com/{username}"
+
+        driver = get_selenium_driver()
+        if not driver:
+            return {'status': 'error', 'message': 'Failed to initialize Chrome driver'}
+
+        driver.get(url)
+        time.sleep(5)  # Wait for page load
+
+        result = {
+            'status': 'success',
+            'username': username,
+            'profile_url': url,
+            'name': 'Not found',
+            'category': 'Not found',
+            'followers': 'Not found',
+            'likes': 'Not found',
+            'description': 'Not found',
+            'website': 'Not found',
+            'email': 'Not found',
+            'phone': 'Not found',
+            'address': 'Not found',
+            'page_type': 'Not found'
+        }
+
+        # Try to get page title/name
+        try:
+            title = driver.title
+            if title and title != 'Facebook':
+                result['name'] = title.replace(' | Facebook', '').replace(' - Facebook', '').strip()
+        except:
+            pass
+
+        # Try to find name from h1
+        try:
+            name_elem = driver.find_element(By.TAG_NAME, 'h1')
+            if name_elem:
+                result['name'] = name_elem.text.strip()
+        except:
+            pass
+
+        # Get page source for regex parsing
+        page_source = driver.page_source
+        soup = BeautifulSoup(page_source, 'html.parser')
+
+        # Extract meta description
+        try:
+            meta_desc = soup.find('meta', {'name': 'description'})
+            if meta_desc:
+                result['description'] = meta_desc.get('content', 'Not found')
+        except:
+            pass
+
+        # Extract followers/likes from page source
+        followers_match = re.search(r'(\d+[.,]?\d*\s*[KMB]?)\s*followers', page_source, re.IGNORECASE)
+        if followers_match:
+            result['followers'] = followers_match.group(1).strip()
+
+        likes_match = re.search(r'(\d+[.,]?\d*\s*[KMB]?)\s*likes', page_source, re.IGNORECASE)
+        if likes_match:
+            result['likes'] = likes_match.group(1).strip()
+
+        # Extract email
+        email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', page_source)
+        if email_match:
+            result['email'] = email_match.group(0)
+
+        # Extract phone
+        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4})', page_source)
+        if phone_match:
+            result['phone'] = phone_match.group(1).strip()
+
+        # Extract website
+        website_match = re.search(r'https?://(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', page_source)
+        if website_match and 'facebook.com' not in website_match.group(0):
+            result['website'] = website_match.group(1)
+
+        # Check if page exists
+        if "This page isn't available" in page_source or "Content Not Found" in page_source:
+            return {'status': 'error', 'message': f"Facebook page '{username}' not found or not accessible"}
+
+        return result
+
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
     finally:
-        scraper.close()
-        print("\n🔚 સ્ક્રેપર બંધ થયો")
+        if driver:
+            driver.quit()
 
+# ════════════════════════════════════════════════════════════════
+# ── INSTAGRAM EXTRACTION (Selenium) ────────────────────────────
+# ════════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
-    main()
+def get_instagram_profile(username):
+    """Extract Instagram public profile data using Selenium"""
+    driver = None
+    try:
+        # Clean username
+        username = username.strip().replace('@', '').split('/')[-1]
+
+        url = f"https://www.instagram.com/{username}/"
+
+        driver = get_selenium_driver()
+        if not driver:
+            return {'status': 'error', 'message': 'Failed to initialize Chrome driver'}
+
+        driver.get(url)
+        time.sleep(6)  # Wait for page load
+
+        result = {
+            'status': 'success',
+            'username': username,
+            'profile_url': url,
+            'name': 'Not found',
+            'bio': 'Not found',
+            'followers': 'Not found',
+            'following': 'Not found',
+            'posts': 'Not found',
+            'is_verified': False,
+            'is_private': False,
+            'profile_pic': 'Not found',
+            'website': 'Not found',
+            'category': 'Not found'
+        }
+
+        page_source = driver.page_source
+        soup = BeautifulSoup(page_source, 'html.parser')
+
+        # Check if private
+        if "This Account is Private" in page_source or "is_private" in page_source:
+            result['is_private'] = True
+            result['bio'] = "This account is private. Limited data available."
+
+        # Check if account exists
+        if "Page Not Found" in page_source or "Sorry, this page" in page_source:
+            return {'status': 'error', 'message': f"Instagram user '@{username}' not found"}
+
+        # Extract from meta tags
+        try:
+            meta_title = soup.find('meta', {'property': 'og:title'})
+            if meta_title:
+                title_content = meta_title.get('content', '')
+                result['name'] = title_content.split('(@')[0].strip() if '(@' in title_content else title_content.split('•')[0].strip()
+        except:
+            pass
+
+        try:
+            meta_desc = soup.find('meta', {'property': 'og:description'})
+            if meta_desc:
+                desc = meta_desc.get('content', '')
+                # Parse Instagram description format: "X Followers, Y Following, Z Posts - See..."
+                followers_match = re.search(r'(\d+[.,]?\d*\s*[KMB]?)\s*Followers', desc, re.IGNORECASE)
+                if followers_match:
+                    result['followers'] = followers_match.group(1).strip()
+
+                following_match = re.search(r'(\d+[.,]?\d*\s*[KMB]?)\s*Following', desc, re.IGNORECASE)
+                if following_match:
+                    result['following'] = following_match.group(1).strip()
+
+                posts_match = re.search(r'(\d+[.,]?\d*\s*[KMB]?)\s*Posts', desc, re.IGNORECASE)
+                if posts_match:
+                    result['posts'] = posts_match.group(1).strip()
+        except:
+            pass
+
+        # Extract profile picture
+        try:
+            meta_image = soup.find('meta', {'property': 'og:image'})
+            if meta_image:
+                result['profile_pic'] = meta_image.get('content', 'Not found')
+        except:
+            pass
+
+        # Extract from shared data / JSON
+        try:
+            scripts = soup.find_all('script', {'type': 'application/ld+json'})
+            for script in scripts:
+                if script.string:
+                    data = json.loads(script.string)
+                    if isinstance(data, dict):
+                        if 'name' in data and result['name'] == 'Not found':
+                            result['name'] = data['name']
+                        if 'description' in data:
+                            result['bio'] = data['description']
+        except:
+            pass
+
+        # Try to find bio from page structure
+        try:
+            # Look for bio in specific sections
+            bio_elements = driver.find_elements(By.XPATH, "//div[contains(@class, '_aa_c')]//span")
+            if bio_elements:
+                result['bio'] = bio_elements[0].text.strip()
+        except:
+            pass
+
+        # Extract website from page source
+        website_match = re.search(r'https?://(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', page_source)
+        if website_match and 'instagram.com' not in website_match.group(0) and 'fbcdn.net' not in website_match.group(0):
+            result['website'] = website_match.group(1)
+
+        return result
+
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+    finally:
+        if driver:
+            driver.quit()
+
+# ════════════════════════════════════════════════════════════════
+# ── LINKEDIN EXTRACTION (Selenium) ─────────────────────────────
+# ════════════════════════════════════════════════════════════════
+
+def get_linkedin_profile(url_or_username):
+    """Extract LinkedIn public profile data using Selenium"""
+    driver = None
+    try:
+        # Handle URL or username input
+        if 'linkedin.com' in url_or_username:
+            url = url_or_username.strip()
+            if not url.startswith('http'):
+                url = 'https://' + url
+        else:
+            url = f"https://www.linkedin.com/in/{url_or_username.strip()}/"
+
+        driver = get_selenium_driver()
+        if not driver:
+            return {'status': 'error', 'message': 'Failed to initialize Chrome driver'}
+
+        driver.get(url)
+        time.sleep(7)  # Wait for page load (LinkedIn is slow)
+
+        result = {
+            'status': 'success',
+            'profile_url': url,
+            'name': 'Not found',
+            'headline': 'Not found',
+            'location': 'Not found',
+            'company': 'Not found',
+            'education': 'Not found',
+            'connections': 'Not found',
+            'about': 'Not found',
+            'experience': [],
+            'skills': [],
+            'profile_pic': 'Not found'
+        }
+
+        page_source = driver.page_source
+        soup = BeautifulSoup(page_source, 'html.parser')
+
+        # Check if profile exists
+        if "This page doesn't exist" in page_source or "couldn't find" in page_source.lower():
+            return {'status': 'error', 'message': "LinkedIn profile not found"}
+
+        # Check if login required
+        if "Sign in" in page_source and "Join now" in page_source:
+            # Try to extract whatever public data is available
+            pass
+
+        # Extract from meta tags
+        try:
+            meta_title = soup.find('meta', {'property': 'og:title'})
+            if meta_title:
+                title = meta_title.get('content', '')
+                result['name'] = title.split(' | ')[0].strip() if ' | ' in title else title.split(' - ')[0].strip()
+        except:
+            pass
+
+        try:
+            meta_desc = soup.find('meta', {'property': 'og:description'})
+            if meta_desc:
+                result['headline'] = meta_desc.get('content', 'Not found')
+        except:
+            pass
+
+        try:
+            meta_image = soup.find('meta', {'property': 'og:image'})
+            if meta_image:
+                result['profile_pic'] = meta_image.get('content', 'Not found')
+        except:
+            pass
+
+        # Extract from JSON-LD
+        try:
+            scripts = soup.find_all('script', {'type': 'application/ld+json'})
+            for script in scripts:
+                if script.string:
+                    data = json.loads(script.string)
+                    if isinstance(data, dict):
+                        if 'name' in data and result['name'] == 'Not found':
+                            result['name'] = data['name']
+                        if 'jobTitle' in data:
+                            result['headline'] = data['jobTitle']
+                        if 'worksFor' in data:
+                            if isinstance(data['worksFor'], dict):
+                                result['company'] = data['worksFor'].get('name', 'Not found')
+                            else:
+                                result['company'] = str(data['worksFor'])
+                        if 'address' in data and isinstance(data['address'], dict):
+                            result['location'] = data['address'].get('addressLocality', 'Not found')
+                        if 'description' in data:
+                            result['about'] = data['description']
+                        if 'image' in data:
+                            result['profile_pic'] = data['image']
+                        if 'alumniOf' in data:
+                            if isinstance(data['alumniOf'], list):
+                                result['education'] = ', '.join([edu.get('name', '') for edu in data['alumniOf'] if isinstance(edu, dict)])
+                            elif isinstance(data['alumniOf'], dict):
+                                result['education'] = data['alumniOf'].get('name', 'Not found')
+        except:
+            pass
+
+        # Extract connections count
+        connections_match = re.search(r'(\d+)\+?\s*connections?', page_source, re.IGNORECASE)
+        if connections_match:
+            result['connections'] = connections_match.group(1) + '+'
+
+        # Extract location from text
+        location_patterns = [
+            r'([A-Za-z\s]+,\s*[A-Za-z\s]+)\s*•',
+            r'Located\s+in\s+([A-Za-z\s,]+)',
+            r'([A-Za-z\s]+,\s*[A-Z]{2})\s*\|'
+        ]
+        for pattern in location_patterns:
+            loc_match = re.search(pattern, page_source)
+            if loc_match:
+                result['location'] = loc_match.group(1).strip()
+                break
+
+        return result
+
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+    finally:
+        if driver:
+            driver.quit()
+
+# ════════════════════════════════════════════════════════════════
+# ── PROCESSING ──────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+
+if extract_btn:
+    if mode == "🐙 GitHub Profile":
+        if not username:
+            st.warning("Please enter a GitHub username.")
+        else:
+            username = username.strip().replace('@', '').split('/')[-1]
+            with st.spinner(f"🔍 Fetching @{username}..."):
+                result = get_github_profile(username)
+
+            if result['status'] == 'error':
+                st.error(f"❌ {result['message']}")
+            else:
+                st.success(f"✅ Profile @{result['username']} extracted!")
+                st.markdown("---")
+
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    st.image(result['avatar_url'], width=100)
+                with col2:
+                    st.markdown(f"### {result['name']}")
+                    st.caption(f"@{result['username']}")
+                    st.markdown(f"📝 {result['bio']}")
+
+                st.markdown("---")
+                st.markdown("### 📬 Contact Information")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**📧 Email:** {result['email']}")
+                    st.markdown(f"**📍 Location:** {result['location']}")
+                    st.markdown(f"**🏢 Company:** {result['company']}")
+                with col2:
+                    st.markdown(f"**🌐 Blog:** {result['blog']}")
+                    st.markdown(f"**🐦 Twitter:** {result['twitter']}")
+                    st.markdown(f"**🔗 Profile:** [View]({result['profile_url']})")
+
+                st.markdown("---")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("📦 Repos", result['public_repos'])
+                col2.metric("👥 Followers", result['followers'])
+                col3.metric("👤 Following", result['following'])
+
+                with st.expander("📋 Raw Data"):
+                    st.json(result)
+
+    elif mode == "🏢 Company Profile":
+        if not company_name:
+            st.warning("Please enter a company name.")
+        else:
+            with st.spinner(f"🔍 Searching for '{company_name}'..."):
+                result = get_company_info(company_name.strip())
+
+            if result.get('status') == 'error':
+                st.error(f"❌ {result.get('error', 'Unknown error')}")
+            else:
+                st.success(f"✅ Information for '{result['name']}' extracted!")
+                st.markdown("---")
+
+                st.markdown(f"### 🏢 {result['name']}")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**📅 Founded:** {result['founded']}")
+                    st.markdown(f"**👤 Founder:** {result['founder']}")
+                    st.markdown(f"**👔 CEO:** {result['ceo']}")
+                    st.markdown(f"**📧 Email:** {result['email']}")
+                with col2:
+                    st.markdown(f"**📍 Headquarters:** {result['headquarters']}")
+                    st.markdown(f"**🏭 Industry:** {result['industry']}")
+                    st.markdown(f"**👥 Employees:** {result['employees']}")
+                    st.markdown(f"**📞 Phone:** {result['phone']}")
+
+                if result['website'] != 'Not found':
+                    st.markdown(f"**🌐 Website:** [{result['website']}](https://{result['website']})")
+                if result['address'] != 'Not found':
+                    st.markdown(f"**📍 Address:** {result['address']}")
+
+                st.markdown("---")
+                st.caption(f"🕐 Extracted: {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
+                with st.expander("📋 Raw Data"):
+                    st.json(result)
+
+    elif mode == "📘 Facebook Profile":
+        if not fb_username:
+            st.warning("Please enter a Facebook username or page URL.")
+        else:
+            with st.spinner(f"🔍 Fetching Facebook profile '{fb_username}'..."):
+                result = get_facebook_profile(fb_username)
+
+            if result['status'] == 'error':
+                st.error(f"❌ {result['message']}")
+                st.info("💡 Tip: Facebook requires login for most profiles. Try public pages like 'Meta' or 'Google'.")
+            else:
+                st.success(f"✅ Facebook profile extracted!")
+                st.markdown("---")
+
+                st.markdown(f"### 📘 {result['name']}")
+                st.caption(f"facebook.com/{result['username']}")
+
+                if result['description'] != 'Not found':
+                    st.markdown(f"📝 {result['description'][:200]}...")
+
+                st.markdown("---")
+                st.markdown("### 📬 Page Information")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**👥 Followers:** {result['followers']}")
+                    st.markdown(f"**👍 Likes:** {result['likes']}")
+                    st.markdown(f"**📧 Email:** {result['email']}")
+                with col2:
+                    st.markdown(f"**📞 Phone:** {result['phone']}")
+                    st.markdown(f"**🌐 Website:** {result['website']}")
+                    st.markdown(f"**📍 Address:** {result['address']}")
+
+                st.markdown(f"**🔗 Profile:** [View on Facebook]({result['profile_url']})")
+
+                with st.expander("📋 Raw Data"):
+                    st.json(result)
+
+    elif mode == "📸 Instagram Profile":
+        if not ig_username:
+            st.warning("Please enter an Instagram username.")
+        else:
+            with st.spinner(f"🔍 Fetching Instagram profile '@{ig_username}'..."):
+                result = get_instagram_profile(ig_username)
+
+            if result['status'] == 'error':
+                st.error(f"❌ {result['message']}")
+            else:
+                st.success(f"✅ Instagram profile extracted!")
+                st.markdown("---")
+
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    if result['profile_pic'] != 'Not found':
+                        st.image(result['profile_pic'], width=100)
+                    else:
+                        st.markdown("📸 No image")
+                with col2:
+                    st.markdown(f"### 📸 {result['name']}")
+                    st.caption(f"@{result['username']}")
+                    if result['is_verified']:
+                        st.markdown("✅ Verified")
+                    if result['is_private']:
+                        st.markdown("🔒 Private Account")
+
+                if result['bio'] != 'Not found':
+                    st.markdown(f"📝 {result['bio']}")
+
+                st.markdown("---")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("📸 Posts", result['posts'])
+                col2.metric("👥 Followers", result['followers'])
+                col3.metric("👤 Following", result['following'])
+
+                if result['website'] != 'Not found':
+                    st.markdown(f"**🌐 Website:** [{result['website']}](https://{result['website']})")
+
+                st.markdown(f"**🔗 Profile:** [View on Instagram]({result['profile_url']})")
+
+                with st.expander("📋 Raw Data"):
+                    st.json(result)
+
+    elif mode == "💼 LinkedIn Profile":
+        if not li_url:
+            st.warning("Please enter a LinkedIn profile URL or username.")
+        else:
+            with st.spinner(f"🔍 Fetching LinkedIn profile..."):
+                result = get_linkedin_profile(li_url)
+
+            if result['status'] == 'error':
+                st.error(f"❌ {result['message']}")
+                st.info("💡 Tip: LinkedIn requires login for most profiles. Public profiles show limited data.")
+            else:
+                st.success(f"✅ LinkedIn profile extracted!")
+                st.markdown("---")
+
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    if result['profile_pic'] != 'Not found':
+                        st.image(result['profile_pic'], width=100)
+                    else:
+                        st.markdown("💼")
+                with col2:
+                    st.markdown(f"### 💼 {result['name']}")
+                    st.markdown(f"🎯 {result['headline']}")
+
+                st.markdown("---")
+                st.markdown("### 📬 Professional Information")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**🏢 Company:** {result['company']}")
+                    st.markdown(f"**📍 Location:** {result['location']}")
+                    st.markdown(f"**🎓 Education:** {result['education']}")
+                with col2:
+                    st.markdown(f"**👥 Connections:** {result['connections']}")
+                    st.markdown(f"**🔗 Profile:** [View on LinkedIn]({result['profile_url']})")
+
+                if result['about'] != 'Not found':
+                    st.markdown("---")
+                    st.markdown("### 📝 About")
+                    st.markdown(result['about'])
+
+                with st.expander("📋 Raw Data"):
+                    st.json(result)
+
+# ── SAMPLES ────────────────────────────────────────────────────
+with st.expander("💡 Samples"):
+    if mode == "🐙 GitHub Profile":
+        st.markdown("""
+        ### 🐙 GitHub Developers
+        - `octocat` (GitHub Mascot)
+        - `torvalds` (Linus Torvalds - Linux Creator)
+        - `gvanrossum` (Guido van Rossum - Python Creator)
+        - `defunkt` (GitHub Co-founder)
+        - `karpathy` (Andrej Karpathy - AI Researcher)
+        """)
+    elif mode == "🏢 Company Profile":
+        st.markdown("""
+        - `Google`
+        - `Microsoft`
+        - `Infosys`
+        - `TCS`
+        - `Amazon`
+        - `Apple`
+        """)
+    elif mode == "📘 Facebook Profile":
+        st.markdown("""
+        ### 📘 Facebook Pages (Public)
+        - `Meta` (Meta Platforms)
+        - `Google` 
+        - `Microsoft`
+        - `Tesla` 
+        - `Amazon`
+        - `zuck` (Mark Zuckerberg - if public)
+        """)
+    elif mode == "📸 Instagram Profile":
+        st.markdown("""
+        ### 📸 Instagram Accounts (Public)
+        - `instagram` (Official)
+        - `natgeo` (National Geographic)
+        - `nasa` (NASA)
+        - `google` 
+        - `microsoft`
+        - `teslamotors`
+        """)
+    elif mode == "💼 LinkedIn Profile":
+        st.markdown("""
+        ### 💼 LinkedIn Profiles (Public)
+        - `satyanadella` (Satya Nadella)
+        - `sundarpichai` (Sundar Pichai)
+        - `timcook` (Tim Cook)
+        - `elonmusk` (Elon Musk)
+        - `billgates` (Bill Gates)
+        💡 **Note:** Enter full URL like: `linkedin.com/in/username`
+        """)
+
+# ── FOOTER ─────────────────────────────────────────────────────
+st.markdown("""
+<div style="text-align: center; color: #999; padding: 2rem 0 0.5rem 0; font-size: 0.8rem; border-top: 1px solid #eee; margin-top: 2rem;">
+    ContactIQ · Profile Extractor<br>
+    <span style="font-size: 0.7rem;">GitHub API · DuckDuckGo · Mistral AI · Selenium WebDriver</span>
+</div>
+""", unsafe_allow_html=True)
